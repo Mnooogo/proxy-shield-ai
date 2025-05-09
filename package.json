@@ -1,0 +1,52 @@
+{
+  "name": "proxy-shield-ai",
+  "version": "1.0.0",
+  "description": "proxyshieldai",
+  "author": "Stefan Spasov <info@vetom.bg>",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder build",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "electron": "^29.3.0",
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.26.0",
+    "globals": "^16.1.0"
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "bcrypt": "^5.1.1",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.6.11"
+  },
+  "build": {
+    "appId": "proxy-shield-ai",
+    "productName": "Proxy Shield AI",
+    "directories": {
+      "output": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icons/proxy-shield-ai.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "menuCategory": true
+    }
+  }
+}
