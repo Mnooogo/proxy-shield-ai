@@ -20,7 +20,6 @@ app.use(express.json());
 
 const blockedPath = path.join(__dirname, 'blocked.json');
 let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath, 'utf8')) : {};
-
 function saveBlocked() {
   fs.writeFileSync(blockedPath, JSON.stringify(blockedIPs, null, 2));
 }
@@ -107,9 +106,8 @@ function authenticateJWT(req, res, next) {
 app.post('/proxy', authenticateJWT, async (req, res) => {
   const ip = req.ip;
   const userAgent = req.headers['user-agent'] || 'unknown';
-  const now = Date.now(); // само веднъж!
+  const now = Date.now();
 
-  // ⛔ Проверка дали IP е блокиран
   if (blockedIPs[ip] && blockedIPs[ip] > now) {
     logActivity(`⛔ BLOCKED: ${ip} tried to access during ban`);
     return res.status(403).json({ error: 'Your IP is temporarily blocked.' });
@@ -129,18 +127,16 @@ app.post('/proxy', authenticateJWT, async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields.' });
   }
 
-  // ✅ Броене на заявки
   requestsPerDay[ip] = (requestsPerDay[ip] || 0) + 1;
   saveRequestCount();
 
   if (requestsPerDay[ip] > 100) {
-    blockedIPs[ip] = now + 24 * 60 * 60 * 1000; // 24 ч.
+    blockedIPs[ip] = now + 24 * 60 * 60 * 1000;
     saveBlocked();
     logActivity(`⛔ IP ${ip} blocked for exceeding daily request limit`);
     return res.status(429).json({ error: 'You have been temporarily blocked for 24 hours due to excessive requests.' });
   }
 
-  // ⚠️ Честота на заявки (anti-DDOS)
   ipTimestamps[ip] = ipTimestamps[ip] || [];
   ipTimestamps[ip].push(now);
   ipTimestamps[ip] = ipTimestamps[ip].filter(ts => now - ts < 10000);
@@ -151,7 +147,6 @@ app.post('/proxy', authenticateJWT, async (req, res) => {
     sendTelegramAlert(alertMsg);
   }
 
-  // ✅ Изпращане към OpenAI
   try {
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
@@ -183,37 +178,6 @@ app.post('/proxy', authenticateJWT, async (req, res) => {
     res.status(500).json({ error: 'Proxy error', details: error.message });
   }
 });
-
-
-try {
-  const response = await axios.post(
-    'https://api.openai.com/v1/chat/completions',
-    { model, messages },
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  ); // ✔️ точка и запетая тук е ОК
-
-  const tokenUsed = response.data?.usage?.total_tokens || 0;
-  usageData[ip] = (usageData[ip] || 0) + tokenUsed;
-
-  if (usageData[ip] > 5000) {
-    logActivity(`⚠️ IP ${ip} exceeded token limit (${usageData[ip]})`);
-    return res.status(429).json({ error: 'Token usage limit exceeded.' });
-  }
-
-  saveUsage();
-  logActivity(`✅ ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
-  res.json(response.data);
-
-} catch (error) {
-  logActivity(`Error for ${ip} | ${error.message}`);
-  res.status(500).json({ error: 'Proxy error', details: error.message });
-}
-
 
 app.get('/logs', authenticateJWT, (req, res) => {
   fs.readFile(logPath, 'utf8', (err, data) => {
