@@ -230,6 +230,39 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🧹 [AUTO] Request count reset at 00:00');
 });
 
+// Всички други маршрути...
+
+// === ⬇️ НОВИЯТ GPT CHAT ENDPOINT ТУК: ===
+app.post('/chat', async (req, res) => {
+  const { messages, model } = req.body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'Invalid request: messages missing or invalid' });
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: model || 'gpt-4',
+        messages,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    res.json(response.data);
+  } catch (err) {
+    console.error('❌ GPT Error:', err.message);
+    res.status(500).json({ error: 'GPT request failed', detail: err.message });
+  }
+});
+
+// === ⬇️ СЛЕД НЕГО: app.listen(...) ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
