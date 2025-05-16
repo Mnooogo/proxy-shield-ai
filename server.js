@@ -231,7 +231,7 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🧹 [AUTO] Request count reset at 00:00');
 });
 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🛡 Proxy Shield AI running on http://localhost:${PORT}`);
-  logActivity('Proxy server started');
+  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
