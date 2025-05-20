@@ -70,6 +70,7 @@ async function sendTelegramAlert(msg) {
 }
 
 const users = [];
+const userLimits = { admin: 5000, tester: 1000 }; // Add custom limits per user here
 const setupUser = () => {
   const username = process.env.ADMIN_USER || 'admin';
   const rawPass = process.env.ADMIN_PASS || 'password';
@@ -102,7 +103,33 @@ app.post('/login', (req, res) => {
   }
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '2h' });
   logActivity(`✅ Login success: ${username}`);
-  res.json({ success: true, token });
+  res.send(`
+    <html>
+      <head>
+        <title>Usage Stats</title>
+        <style>
+          body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { padding: 10px; border: 1px solid #555; text-align: left; }
+          progress { width: 100%; height: 16px; }
+          .reset-btn { margin-top: 20px; padding: 10px 20px; background: crimson; color: white; border: none; cursor: pointer; }
+        </style>
+      </head>
+      <body>
+        <h1>📊 Token Usage</h1>
+        <p>Total Used: ${totalUsed}</p>
+        <p>Free Credits Left: ${creditLeft}</p>
+        <p>Remaining Paid Quota: ${remaining}</p>
+        <table>
+          <thead><tr><th>User</th><th>Tokens Used</th><th>Progress</th></tr></thead>
+          <tbody>${usageTableHTML}</tbody>
+        </table>
+        <form method="POST" action="/admin/reset-usage">
+          <button type="submit" class="reset-btn">🔁 Reset All Usage</button>
+        </form>
+      </body>
+    </html>
+  `);
 });
 
 app.post('/proxy', authenticateJWT, async (req, res) => {
@@ -181,6 +208,9 @@ app.post('/proxy', authenticateJWT, async (req, res) => {
 });
 
 app.get('/usage', authenticateJWT, (req, res) => {
+  const usageTableHTML = Object.entries(usagePerUser).map(([user, tokens]) => `
+    <tr><td>${user}</td><td>${tokens}</td><td><progress value="${tokens}" max="${userLimits[user] || 10000}"></progress></td></tr>
+  `).join('');
   const totalUsed = Object.values(usageData).reduce((sum, val) => sum + val, 0);
   const creditLeft = 8.90;
   const limit = 120.0;
@@ -194,6 +224,15 @@ app.get('/usage', authenticateJWT, (req, res) => {
     remaining,
     usagePerUser
   });
+});
+
+app.post('/admin/reset-usage', authenticateJWT, (req, res) => {
+  usageData = {};
+  usagePerUser = {};
+  saveUsage();
+  saveUserUsage();
+  logActivity('🧼 Manual reset of all usage');
+  res.redirect('/usage');
 });
 
 app.post('/chat', authenticateJWT, async (req, res) => {
@@ -223,6 +262,12 @@ app.post('/chat', authenticateJWT, async (req, res) => {
     usageData[username] = (usageData[username] || 0) + tokenUsed;
     usagePerUser[username] = (usagePerUser[username] || 0) + tokenUsed;
 
+    const userLimit = userLimits[username] || 10000;
+    if (usagePerUser[username] > userLimit) {
+      logActivity(`⛔ ${username} exceeded limit (${userLimit} tokens)`);
+      return res.status(429).json({ error: `Token usage limit exceeded (${userLimit}).` });
+    }
+
     saveUsage();
     saveUserUsage();
     logActivity(`✅ ${username} | Tokens: ${tokenUsed} | Total: ${usageData[username]}`);
@@ -242,8 +287,44 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🧹 [AUTO] Daily usage and request count reset');
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
+app.get('/admin-login.html', (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>Admin Login</title>
+        <style>
+          body { font-family: sans-serif; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+          input, button { padding: 10px; margin: 10px; font-size: 1rem; }
+        </style>
+      </head>
+      <body>
+        <h2>🔐 Admin Login</h2>
+        <input id="username" placeholder="Username" />
+        <input id="password" type="password" placeholder="Password" />
+        <button onclick="login()">Login & View Usage</button>
+        <iframe id="usageFrame" style="width: 100%; max-width: 1000px; height: 600px; border: none; margin-top: 20px;"></iframe>
+        <script>
+          async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const res = await fetch('/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (data.token) {
+              localStorage.setItem('jwt', data.token);
+              document.getElementById('usageFrame').src = '/usage?token=' + data.token;
+            } else {
+              alert('Login failed');
+            }
+          }
+        </script>
+      </body>
+    </html>
+  `);
 });
+
+const PORT = process.env.PORT || 3000;
 
