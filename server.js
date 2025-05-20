@@ -43,10 +43,14 @@ function saveUsage() {
   fs.writeFileSync(usagePath, JSON.stringify(usageData, null, 2));
 }
 
+const userUsagePath = path.join(__dirname, 'usage_per_user.json');
+let usagePerUser = fs.existsSync(userUsagePath) ? JSON.parse(fs.readFileSync(userUsagePath, 'utf8')) : {};
+function saveUserUsage() {
+  fs.writeFileSync(userUsagePath, JSON.stringify(usagePerUser, null, 2));
+}
+
 const requestCountPath = path.join(__dirname, 'requests.json');
-let requestsPerDay = fs.existsSync(requestCountPath)
-  ? JSON.parse(fs.readFileSync(requestCountPath, 'utf8'))
-  : {};
+let requestsPerDay = fs.existsSync(requestCountPath) ? JSON.parse(fs.readFileSync(requestCountPath, 'utf8')) : {};
 function saveRequestCount() {
   fs.writeFileSync(requestCountPath, JSON.stringify(requestsPerDay, null, 2));
 }
@@ -73,19 +77,6 @@ const setupUser = () => {
   users.push({ username, passwordHash: hash });
 };
 setupUser();
-console.log('[DEBUG] Current users:', users);
-
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  const user = users.find(u => u.username === username);
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
-    logActivity(`❌ Failed login attempt: ${username}`);
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
-  }
-  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '2h' });
-  logActivity(`✅ Login success: ${username}`);
-  res.json({ success: true, token });
-});
 
 function authenticateJWT(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -101,6 +92,18 @@ function authenticateJWT(req, res, next) {
     return res.status(403).json({ error: 'Invalid token' });
   }
 }
+
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = users.find(u => u.username === username);
+  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+    logActivity(`❌ Failed login attempt: ${username}`);
+    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '2h' });
+  logActivity(`✅ Login success: ${username}`);
+  res.json({ success: true, token });
+});
 
 app.post('/proxy', authenticateJWT, async (req, res) => {
   const ip = req.ip;
@@ -171,70 +174,31 @@ app.post('/proxy', authenticateJWT, async (req, res) => {
     saveUsage();
     logActivity(`✅ ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
     res.json(response.data);
-
   } catch (error) {
     logActivity(`Error for ${ip} | ${error.message}`);
     res.status(500).json({ error: 'Proxy error', details: error.message });
   }
 });
 
-app.get('/logs', authenticateJWT, (req, res) => {
-  fs.readFile(logPath, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Error reading log file.');
-    const lines = data.split('\n');
-    const last100 = lines.slice(-100).join('\n');
-    res.send(last100);
+app.get('/usage', authenticateJWT, (req, res) => {
+  const totalUsed = Object.values(usageData).reduce((sum, val) => sum + val, 0);
+  const creditLeft = 8.90;
+  const limit = 120.0;
+  const spentThisMonth = 16.52;
+  const remaining = limit - totalUsed;
+
+  res.json({
+    thisMonth: spentThisMonth,
+    totalUsed,
+    freeCreditsLeft: creditLeft,
+    remaining,
+    usagePerUser
   });
 });
 
-app.delete('/logs', authenticateJWT, (req, res) => {
-  fs.writeFile(logPath, '', (err) => {
-    if (err) {
-      console.error('❌ Failed to clear logs:', err);
-      return res.status(500).json({ error: 'Failed to clear logs' });
-    }
-    logActivity('Logs cleared manually');
-    res.json({ message: 'Logs cleared' });
-  });
-});
-
-app.get('/logs/json', authenticateJWT, (req, res) => {
-  fs.readFile(logPath, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Error reading log file.');
-    const lines = data.split('\n').filter(Boolean);
-    const entries = lines.map(line => {
-      const match = line.match(/^\[(.*?)\] (.*)$/);
-      return match ? { timestamp: match[1], entry: match[2] } : null;
-    }).filter(Boolean);
-    res.json(entries);
-  });
-});
-
-app.get('/request-counts', authenticateJWT, (req, res) => {
-  res.json(requestsPerDay);
-});
-
-app.delete('/usage', authenticateJWT, (req, res) => {
-  usageData = {};
-  saveUsage();
-  logActivity('🧹 Usage data manually reset by admin.');
-  res.json({ message: 'Usage data reset successfully.' });
-});
-
-cron.schedule('0 0 * * *', () => {
-  usageData = {};
-  saveUsage();
-  logActivity('🧹 [AUTO] Usage data reset at 00:00');
-  requestsPerDay = {};
-  saveRequestCount();
-  logActivity('🧹 [AUTO] Request count reset at 00:00');
-});
-
-// Всички други маршрути...
-
-// === ⬇️ НОВИЯТ GPT CHAT ENDPOINT ТУК: ===
-app.post('/chat', async (req, res) => {
+app.post('/chat', authenticateJWT, async (req, res) => {
   const { messages, model } = req.body;
+  const username = req.user?.username || 'anonymous';
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Invalid request: messages missing or invalid' });
@@ -255,6 +219,14 @@ app.post('/chat', async (req, res) => {
       }
     );
 
+    const tokenUsed = response.data?.usage?.total_tokens || 0;
+    usageData[username] = (usageData[username] || 0) + tokenUsed;
+    usagePerUser[username] = (usagePerUser[username] || 0) + tokenUsed;
+
+    saveUsage();
+    saveUserUsage();
+    logActivity(`✅ ${username} | Tokens: ${tokenUsed} | Total: ${usageData[username]}`);
+
     res.json(response.data);
   } catch (err) {
     console.error('❌ GPT Error:', err.message);
@@ -262,8 +234,16 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-// === ⬇️ СЛЕД НЕГО: app.listen(...) ===
+cron.schedule('0 0 * * *', () => {
+  usageData = {};
+  saveUsage();
+  requestsPerDay = {};
+  saveRequestCount();
+  logActivity('🧹 [AUTO] Daily usage and request count reset');
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
+
