@@ -106,6 +106,8 @@ app.post('/login', (req, res) => {
   res.send(`
     <html>
       <head>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      <head>
         <title>Usage Stats</title>
         <style>
           body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
@@ -127,7 +129,36 @@ app.post('/login', (req, res) => {
         <form method="POST" action="/admin/reset-usage">
           <button type="submit" class="reset-btn">🔁 Reset All Usage</button>
         </form>
-      </body>
+      <canvas id="dailyChart" width="800" height="300"></canvas>
+<script>
+  const ctx = document.getElementById('dailyChart').getContext('2d');
+  fetch('/usage-data')
+    .then(res => res.json())
+    .then(data => {
+      const labels = data.map(row => row.date);
+      const values = data.map(row => row.tokens);
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Tokens Used Per Day',
+            data: values,
+            backgroundColor: 'goldenrod'
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    });
+</script>
+</body>
     </html>
   `);
 });
@@ -338,5 +369,16 @@ app.get('/admin-login.html', (req, res) => {
   `);
 });
 
+app.get('/usage-data', authenticateJWT, (req, res) => {
+  const usageByDayPath = path.join(__dirname, 'usage_by_day.json');
+  let usageByDay = fs.existsSync(usageByDayPath) ? JSON.parse(fs.readFileSync(usageByDayPath, 'utf8')) : {};
+  const sorted = Object.entries(usageByDay)
+    .sort(([a], [b]) => new Date(a) - new Date(b))
+    .slice(-7)
+    .map(([date, tokens]) => ({ date, tokens }));
+  res.json(sorted);
+});
+
 const PORT = process.env.PORT || 3000;
+
 
