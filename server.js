@@ -106,6 +106,15 @@ app.post('/login', (req, res) => {
   res.json({ success: true, token });
 });
 
+app.get('/logs', authenticateJWT, (req, res) => {
+  fs.readFile(logPath, 'utf8', (err, data) => {
+    if (err) return res.status(500).send('Error reading log file.');
+    const lines = data.split('\n');
+    const last100 = lines.slice(-100).join('\n');
+    res.send(last100);
+  });
+});
+
 app.post('/proxy', authenticateJWT, async (req, res) => {
   const ip = req.ip;
   const userAgent = req.headers['user-agent'] || 'unknown';
@@ -195,4 +204,3 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
-
