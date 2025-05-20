@@ -94,6 +94,18 @@ function authenticateJWT(req, res, next) {
   }
 }
 
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = users.find(u => u.username === username);
+  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+    logActivity(`❌ Failed login attempt: ${username}`);
+    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '2h' });
+  logActivity(`✅ Login success: ${username}`);
+  res.json({ success: true, token });
+});
+
 app.post('/proxy', authenticateJWT, async (req, res) => {
   const ip = req.ip;
   const userAgent = req.headers['user-agent'] || 'unknown';
@@ -179,7 +191,7 @@ app.get('/usage-data', authenticateJWT, (req, res) => {
   res.json(sorted);
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
