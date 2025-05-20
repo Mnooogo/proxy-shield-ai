@@ -211,18 +211,30 @@ app.get('/usage', authenticateJWT, (req, res) => {
   const usageTableHTML = Object.entries(usagePerUser).map(([user, tokens]) => `
     <tr><td>${user}</td><td>${tokens}</td><td><progress value="${tokens}" max="${userLimits[user] || 10000}"></progress></td></tr>
   `).join('');
+
+  const usageByDayPath = path.join(__dirname, 'usage_by_day.json');
+  let usageByDay = fs.existsSync(usageByDayPath) ? JSON.parse(fs.readFileSync(usageByDayPath, 'utf8')) : {};
+  const today = new Date().toISOString().split('T')[0];
+  usageByDay[today] = usageByDay[today] || 0;
+  usageByDay[today] += Object.values(usagePerUser).reduce((sum, t) => sum + t, 0);
+  fs.writeFileSync(usageByDayPath, JSON.stringify(usageByDay, null, 2));
+  const usageTableHTML = Object.entries(usagePerUser).map(([user, tokens]) => `
+    <tr><td>${user}</td><td>${tokens}</td><td><progress value="${tokens}" max="${userLimits[user] || 10000}"></progress></td></tr>
+  `).join('');
   const totalUsed = Object.values(usageData).reduce((sum, val) => sum + val, 0);
   const creditLeft = 8.90;
   const limit = 120.0;
   const spentThisMonth = 16.52;
   const remaining = limit - totalUsed;
 
+    const usageDays = Object.entries(usageByDay).slice(-7).map(([day, val]) => ({ date: day, tokens: val }));
   res.json({
     thisMonth: spentThisMonth,
     totalUsed,
     freeCreditsLeft: creditLeft,
     remaining,
-    usagePerUser
+    usagePerUser,
+    usageByDay: usageDays
   });
 });
 
