@@ -72,8 +72,8 @@ async function sendTelegramAlert(msg) {
 const users = [];
 const userLimits = { admin: 5000, tester: 1000 }; // Add custom limits per user here
 const setupUser = () => {
-  const username = process.env.ADMIN_USER || 'admin';
-  const rawPass = process.env.ADMIN_PASS || 'password';
+  const username = process.env.ADMIN_USER || 'adminSTEF';
+  const rawPass = process.env.ADMIN_PASS || 'VetomEmka21$$$';
   const hash = bcrypt.hashSync(rawPass, 10);
   users.push({ username, passwordHash: hash });
 };
