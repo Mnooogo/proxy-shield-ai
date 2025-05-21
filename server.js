@@ -94,17 +94,7 @@ function authenticateJWT(req, res, next) {
   }
 }
 
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  const user = users.find(u => u.username === username);
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
-    logActivity(`❌ Failed login attempt: ${username}`);
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
-  }
-  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '2h' });
-  logActivity(`✅ Login success: ${username}`);
-  res.json({ success: true, token });
-});
+
 
 app.get('/logs', authenticateJWT, (req, res) => {
   fs.readFile(logPath, 'utf8', (err, data) => {
@@ -115,7 +105,8 @@ app.get('/logs', authenticateJWT, (req, res) => {
   });
 });
 
-app.post('/proxy', authenticateJWT, async (req, res) => {
+app.post('/proxy', async (req, res) => {
+
   const ip = req.ip;
   const userAgent = req.headers['user-agent'] || 'unknown';
   const now = Date.now();
