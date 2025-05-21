@@ -1,3 +1,4 @@
+// ✅ Обновен server.js с GPT Secret защита
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
@@ -13,6 +14,7 @@ const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const GPT_SECRET = process.env.GPT_SECRET;
 
 app.use(cors());
 app.use(express.json());
@@ -69,8 +71,19 @@ async function sendTelegramAlert(msg) {
   }
 }
 
+// ✅ GPT Secret middleware
+function checkGPTSecret(req, res, next) {
+  const secret = req.headers['x-secret'];
+  if (!secret || secret !== GPT_SECRET) {
+    logActivity(`🚫 Unauthorized access attempt to ${req.originalUrl} from ${req.ip}`);
+    return res.status(403).json({ error: 'Unauthorized – missing or invalid GPT secret.' });
+  }
+  next();
+}
+
+// 🧱 Потребители и пароли
 const users = [];
-const userLimits = { admin: 5000, tester: 1000 }; // Add custom limits per user here
+const userLimits = { admin: 5000, tester: 1000 };
 const setupUser = () => {
   const username = process.env.ADMIN_USER || 'adminSTEF';
   const rawPass = process.env.ADMIN_PASS || 'VetomEmka21$$$';
@@ -94,8 +107,6 @@ function authenticateJWT(req, res, next) {
   }
 }
 
-
-
 app.get('/logs', authenticateJWT, (req, res) => {
   fs.readFile(logPath, 'utf8', (err, data) => {
     if (err) return res.status(500).send('Error reading log file.');
@@ -105,8 +116,39 @@ app.get('/logs', authenticateJWT, (req, res) => {
   });
 });
 
-app.post('/proxy', async (req, res) => {
+// ✅ GPT Protected Telegram Alert
+app.post('/api/alert-telegram', checkGPTSecret, async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'Message is required' });
 
+  try {
+    await sendTelegramAlert(message);
+    logActivity(`📨 Telegram alert sent: ${message}`);
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('Telegram alert error:', err.message);
+    res.status(500).json({ error: 'Failed to send alert' });
+  }
+});
+
+// ✅ GPT Protected Block IP
+app.post('/api/block-ip', checkGPTSecret, (req, res) => {
+  const { ip } = req.body;
+  if (!ip || typeof ip !== 'string') {
+    return res.status(400).json({ error: 'Invalid or missing IP' });
+  }
+
+  const blockUntil = Date.now() + 24 * 60 * 60 * 1000;
+  blockedIPs[ip] = blockUntil;
+  saveBlocked();
+
+  const msg = `🔒 IP ${ip} was blocked via GPT Action.`;
+  logActivity(msg);
+  sendTelegramAlert(msg);
+  res.status(200).json({ success: true, blockedUntil: new Date(blockUntil).toISOString() });
+});
+
+app.post('/proxy', async (req, res) => {
   const ip = req.ip;
   const userAgent = req.headers['user-agent'] || 'unknown';
   const now = Date.now();
@@ -157,8 +199,8 @@ app.post('/proxy', async (req, res) => {
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+          'Content-Type': 'application/json'
+        }
       }
     );
 
