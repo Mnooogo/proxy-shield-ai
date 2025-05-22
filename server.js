@@ -237,3 +237,32 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
+app.post('/api/vision', async (req, res) => {
+  const { imageBase64 } = req.body;
+
+  try {
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You're a construction material expert. Identify the material in this image." },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+          ]
+        }
+      ],
+      max_tokens: 100,
+    }, {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("❌ Vision API error:", error.message);
+    res.status(500).json({ error: "Vision API failed" });
+  }
+});
