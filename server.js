@@ -17,7 +17,9 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GPT_SECRET = process.env.GPT_SECRET;
 
 app.use(cors());
-app.use(express.json());
+// Allow large Base64 image payloads for vision analysis
+app.use(express.json({ limit: '15mb' }));
+
 
 const blockedPath = path.join(__dirname, 'blocked.json');
 let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath, 'utf8')) : {};
