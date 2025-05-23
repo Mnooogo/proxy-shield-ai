@@ -239,14 +239,18 @@ app.get('/usage-data', authenticateJWT, (req, res) => {
 app.post('/chat', async (req, res) => {
   const { messages, model } = req.body;
 
-  if (!messages || !model) {
-    return res.status(400).json({ error: 'Missing messages or model' });
-  }
+if (!messages) {
+  return res.status(400).json({ error: 'Missing messages' });
+}
+
+const selectedModel = model || "gpt-4"; // ако липсва model, използваме gpt-4
+
 
   try {
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
-      { model, messages },
+      { model: selectedModel, messages },
+
       {
         headers: {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
