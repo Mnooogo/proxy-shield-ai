@@ -235,7 +235,35 @@ app.get('/usage-data', authenticateJWT, (req, res) => {
   res.json(sorted);
 });
 
-const PORT = process.env.PORT || 10000;
+// ✅ /chat endpoint за Dev Assistant App @
+app.post('/chat', async (req, res) => {
+  const { messages, model } = req.body;
+
+  if (!messages || !model) {
+    return res.status(400).json({ error: 'Missing messages or model' });
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      { model, messages },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("❌ GPT Chat error:", error.message);
+    res.status(500).json({ error: 'Chat API failed', details: error.message });
+  }
+});
+
+const PORT = process.env.PORT || 10000;„
+
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
