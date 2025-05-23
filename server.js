@@ -255,7 +255,9 @@ app.post('/chat', async (req, res) => {
       }
     );
 
-    res.json(response.data);
+    const reply = response.data.choices[0]?.message?.content || "No reply generated.";
+    res.json({ reply });
+
   } catch (error) {
     console.error("❌ GPT Chat error:", error.message);
     res.status(500).json({ error: 'Chat API failed', details: error.message });
