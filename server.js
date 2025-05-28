@@ -1,4 +1,4 @@
-// ✅ Обновен server.js с GPT Secret защита
+// ✅ Full Proxy Shield AI server.js with ALL protections and logic integrated
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
@@ -11,60 +11,55 @@ const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
 
 const app = express();
+const PORT = process.env.PORT || 10000;
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GPT_SECRET = process.env.GPT_SECRET;
 
 app.use(cors());
-// Allow large Base64 image payloads for vision analysis
 app.use(express.json({ limit: '15mb' }));
-
 
 const blockedPath = path.join(__dirname, 'blocked.json');
 let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath, 'utf8')) : {};
-function saveBlocked() {
-  fs.writeFileSync(blockedPath, JSON.stringify(blockedIPs, null, 2));
-}
+function saveBlocked() { fs.writeFileSync(blockedPath, JSON.stringify(blockedIPs, null, 2)); }
 
-const limiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
-  message: '⚠️ Too many requests from this IP, please try again later.',
-});
-app.use(limiter);
+const usagePath = path.join(__dirname, 'usage.json');
+let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : {};
+function saveUsage() { fs.writeFileSync(usagePath, JSON.stringify(usageData, null, 2)); }
 
-const allowedIPs = ['127.0.0.1', '::1'];
+const requestCountPath = path.join(__dirname, 'requests.json');
+let requestsPerDay = fs.existsSync(requestCountPath) ? JSON.parse(fs.readFileSync(requestCountPath, 'utf8')) : {};
+function saveRequestCount() { fs.writeFileSync(requestCountPath, JSON.stringify(requestsPerDay, null, 2)); }
+
 const logPath = path.join(__dirname, 'proxy_log.txt');
 function logActivity(entry) {
   const logEntry = `[${new Date().toISOString()}] ${entry}\n`;
   fs.appendFileSync(logPath, logEntry);
 }
 
-const usagePath = path.join(__dirname, 'usage.json');
-let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : {};
-function saveUsage() {
-  fs.writeFileSync(usagePath, JSON.stringify(usageData, null, 2));
-}
-
-const userUsagePath = path.join(__dirname, 'usage_per_user.json');
-let usagePerUser = fs.existsSync(userUsagePath) ? JSON.parse(fs.readFileSync(userUsagePath, 'utf8')) : {};
-function saveUserUsage() {
-  fs.writeFileSync(userUsagePath, JSON.stringify(usagePerUser, null, 2));
-}
-
-const requestCountPath = path.join(__dirname, 'requests.json');
-let requestsPerDay = fs.existsSync(requestCountPath) ? JSON.parse(fs.readFileSync(requestCountPath, 'utf8')) : {};
-function saveRequestCount() {
-  fs.writeFileSync(requestCountPath, JSON.stringify(requestsPerDay, null, 2));
-}
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: '⚠️ Too many requests from this IP, please try again later.'
+});
+app.use(limiter);
 
 const ipTimestamps = {};
+
+function checkGPTSecret(req, res, next) {
+  const secret = req.headers['x-secret'];
+  if (!secret || secret !== GPT_SECRET) {
+    logActivity(`🚫 Unauthorized access to ${req.originalUrl} from ${req.ip}`);
+    return res.status(403).json({ error: 'Unauthorized – invalid GPT secret.' });
+  }
+  next();
+}
+
 async function sendTelegramAlert(msg) {
   if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
-  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
   try {
-    await axios.post(url, {
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: TELEGRAM_CHAT_ID,
       text: `🚨 Proxy Alert:\n${msg}`,
     });
@@ -73,19 +68,7 @@ async function sendTelegramAlert(msg) {
   }
 }
 
-// ✅ GPT Secret middleware
-function checkGPTSecret(req, res, next) {
-  const secret = req.headers['x-secret'];
-  if (!secret || secret !== GPT_SECRET) {
-    logActivity(`🚫 Unauthorized access attempt to ${req.originalUrl} from ${req.ip}`);
-    return res.status(403).json({ error: 'Unauthorized – missing or invalid GPT secret.' });
-  }
-  next();
-}
-
-// 🧱 Потребители и пароли
 const users = [];
-const userLimits = { admin: 5000, tester: 1000 };
 const setupUser = () => {
   const username = process.env.ADMIN_USER || 'adminSTEF';
   const rawPass = process.env.ADMIN_PASS || 'VetomEmka21$$$';
@@ -96,13 +79,10 @@ setupUser();
 
 function authenticateJWT(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(403).json({ error: 'Missing or invalid token' });
-  }
-  const token = authHeader.split(' ')[1];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(403).json({ error: 'Invalid token' });
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    const token = authHeader.split(' ')[1];
+    req.user = jwt.verify(token, JWT_SECRET);
     next();
   } catch (err) {
     return res.status(403).json({ error: 'Invalid token' });
@@ -111,48 +91,14 @@ function authenticateJWT(req, res, next) {
 
 app.get('/logs', authenticateJWT, (req, res) => {
   fs.readFile(logPath, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Error reading log file.');
-    const lines = data.split('\n');
-    const last100 = lines.slice(-100).join('\n');
-    res.send(last100);
+    if (err) return res.status(500).send('Error reading log.');
+    res.send(data.split('\n').slice(-100).join('\n'));
   });
 });
 
-// ✅ GPT Protected Telegram Alert
-app.post('/api/alert-telegram', checkGPTSecret, async (req, res) => {
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ error: 'Message is required' });
-
-  try {
-    await sendTelegramAlert(message);
-    logActivity(`📨 Telegram alert sent: ${message}`);
-    res.status(200).json({ success: true });
-  } catch (err) {
-    console.error('Telegram alert error:', err.message);
-    res.status(500).json({ error: 'Failed to send alert' });
-  }
-});
-
-// ✅ GPT Protected Block IP
-app.post('/api/block-ip', checkGPTSecret, (req, res) => {
-  const { ip } = req.body;
-  if (!ip || typeof ip !== 'string') {
-    return res.status(400).json({ error: 'Invalid or missing IP' });
-  }
-
-  const blockUntil = Date.now() + 24 * 60 * 60 * 1000;
-  blockedIPs[ip] = blockUntil;
-  saveBlocked();
-
-  const msg = `🔒 IP ${ip} was blocked via GPT Action.`;
-  logActivity(msg);
-  sendTelegramAlert(msg);
-  res.status(200).json({ success: true, blockedUntil: new Date(blockUntil).toISOString() });
-});
-
+// ✅ Full proxy endpoint for external clients
 app.post('/proxy', async (req, res) => {
   const ip = req.ip;
-  const userAgent = req.headers['user-agent'] || 'unknown';
   const now = Date.now();
 
   if (blockedIPs[ip] && blockedIPs[ip] > now) {
@@ -163,14 +109,9 @@ app.post('/proxy', async (req, res) => {
     saveBlocked();
   }
 
-  if (!allowedIPs.includes(ip)) {
-    logActivity(`Blocked request from IP: ${ip} | UA: ${userAgent}`);
-    return res.status(403).json({ error: 'Access denied.' });
-  }
-
   const { apiKey, messages, model } = req.body;
   if (!apiKey || !messages || !model) {
-    logActivity(`Invalid request structure from ${ip}`);
+    logActivity(`Invalid request from ${ip}`);
     return res.status(400).json({ error: 'Missing required fields.' });
   }
 
@@ -181,7 +122,7 @@ app.post('/proxy', async (req, res) => {
     blockedIPs[ip] = now + 24 * 60 * 60 * 1000;
     saveBlocked();
     logActivity(`⛔ IP ${ip} blocked for exceeding daily request limit`);
-    return res.status(429).json({ error: 'You have been temporarily blocked for 24 hours due to excessive requests.' });
+    return res.status(429).json({ error: 'You have been temporarily blocked for 24 hours.' });
   }
 
   ipTimestamps[ip] = ipTimestamps[ip] || [];
@@ -189,116 +130,106 @@ app.post('/proxy', async (req, res) => {
   ipTimestamps[ip] = ipTimestamps[ip].filter(ts => now - ts < 10000);
 
   if (ipTimestamps[ip].length > 5) {
-    const alertMsg = `🚨 Suspicious activity from ${ip} — ${ipTimestamps[ip].length} requests in 10s`;
+    const alertMsg = `🚨 Suspicious activity from ${ip} – ${ipTimestamps[ip].length} requests in 10s`;
     logActivity(alertMsg);
     sendTelegramAlert(alertMsg);
   }
 
   try {
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
+    const response = await axios.post('https://api.openai.com/v1/chat/completions',
       { model, messages },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } });
 
     const tokenUsed = response.data?.usage?.total_tokens || 0;
     usageData[ip] = (usageData[ip] || 0) + tokenUsed;
+    saveUsage();
 
     if (usageData[ip] > 5000) {
       blockedIPs[ip] = now + 24 * 60 * 60 * 1000;
       saveBlocked();
       logActivity(`⛔ IP ${ip} blocked for exceeding token limit`);
-      return res.status(429).json({ error: 'You have been temporarily blocked for 24 hours due to excessive token usage.' });
+      return res.status(429).json({ error: 'Token limit exceeded. Blocked 24h.' });
     }
 
-    saveUsage();
     logActivity(`✅ ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
     res.json(response.data);
-  } catch (error) {
-    logActivity(`Error for ${ip} | ${error.message}`);
-    res.status(500).json({ error: 'Proxy error', details: error.message });
+  } catch (err) {
+    logActivity(`❌ Proxy error for ${ip} | ${err.message}`);
+    res.status(500).json({ error: 'Proxy error', details: err.message });
   }
 });
 
-app.get('/usage-data', authenticateJWT, (req, res) => {
-  const usageByDayPath = path.join(__dirname, 'usage_by_day.json');
-  let usageByDay = fs.existsSync(usageByDayPath) ? JSON.parse(fs.readFileSync(usageByDayPath, 'utf8')) : {};
-  const sorted = Object.entries(usageByDay)
-    .sort(([a], [b]) => new Date(a) - new Date(b))
-    .slice(-7)
-    .map(([date, tokens]) => ({ date, tokens }));
-  res.json(sorted);
-});
-
-// ✅ /chat endpoint за Dev Assistant App @
-app.post('/chat', async (req, res) => {
+// ✅ Protected /chat endpoint
+app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, model } = req.body;
+  if (!messages) return res.status(400).json({ error: 'Missing messages' });
 
-if (!messages) {
-  return res.status(400).json({ error: 'Missing messages' });
-}
+  const ip = req.ip;
+  const selectedModel = model || 'gpt-4';
+  const now = Date.now();
 
-const selectedModel = model || "gpt-4"; // ако липсва model, използваме gpt-4
-
+  if (blockedIPs[ip] && blockedIPs[ip] > now) {
+    return res.status(403).json({ error: '⛔ Your IP is temporarily blocked.' });
+  }
 
   try {
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
+    const response = await axios.post('https://api.openai.com/v1/chat/completions',
       { model: selectedModel, messages },
+      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' } });
 
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    const reply = response.data.choices[0]?.message?.content || 'No reply generated.';
+    const tokenUsed = response.data?.usage?.total_tokens || 0;
 
-    const reply = response.data.choices[0]?.message?.content || "No reply generated.";
+    usageData[ip] = (usageData[ip] || 0) + tokenUsed;
+    saveUsage();
+
+    if (usageData[ip] > 5000) {
+      blockedIPs[ip] = now + 24 * 60 * 60 * 1000;
+      saveBlocked();
+      logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
+      return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
+    }
+
+    logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
     res.json({ reply });
-
-  } catch (error) {
-    console.error("❌ GPT Chat error:", error.message);
-    res.status(500).json({ error: 'Chat API failed', details: error.message });
+  } catch (err) {
+    logActivity(`❌ /chat error for ${ip} | ${err.message}`);
+    res.status(500).json({ error: 'Chat error', details: err.message });
   }
 });
 
-const PORT = process.env.PORT || 10000;
+app.post('/api/vision', checkGPTSecret, async (req, res) => {
+  const { imageBase64 } = req.body;
+  try {
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: 'You are a material expert. Identify the material in the image.' },
+        {
+          role: 'user',
+          content: [ { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } } ]
+        }
+      ],
+      max_tokens: 100
+    }, {
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
+    });
+    res.json(response.data);
+  } catch (error) {
+    console.error('❌ Vision API error:', error.message);
+    res.status(500).json({ error: 'Vision API failed' });
+  }
+});
+
+cron.schedule('0 0 * * *', () => {
+  usageData = {};
+  requestsPerDay = {};
+  saveUsage();
+  saveRequestCount();
+  logActivity('🔁 Daily reset of usage and request count.');
+});
 
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
-app.post('/api/vision', async (req, res) => {
-  const { imageBase64 } = req.body;
 
-  try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You're a construction material expert. Identify the material in this image." },
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
-          ]
-        }
-      ],
-      max_tokens: 100,
-    }, {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    res.json(response.data);
-  } catch (error) {
-    console.error("❌ Vision API error:", error.message);
-    res.status(500).json({ error: "Vision API failed" });
-  }
-});
