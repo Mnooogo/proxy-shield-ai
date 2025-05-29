@@ -229,6 +229,31 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🔁 Daily reset of usage and request count.');
 });
 
+// В server.js
+app.post('/usage', async (req, res) => {
+  const startDate = '2025-05-01'; // може да се изчислява динамично
+  const endDate = new Date().toISOString().split('T')[0];
+
+  try {
+    const usageResponse = await fetch(`https://api.openai.com/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      }
+    });
+
+    const usageData = await usageResponse.json();
+
+    // Приблизителен лимит – 90,000 токена
+    const used = Math.round(usageData.total_usage / 0.00001); // или вземи направо токени ако имаш по-прецизен метод
+    const remaining = 90000 - used;
+
+    res.json({ used, remaining });
+  } catch (err) {
+    console.error('Error fetching usage:', err);
+    res.status(500).json({ error: 'Failed to fetch usage' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
