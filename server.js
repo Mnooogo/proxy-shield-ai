@@ -229,45 +229,14 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🔁 Daily reset of usage and request count.');
 });
 
-// В server.js
-app.post('/usage', async (req, res) => {
-  const startDate = '2025-05-01'; // може да се изчислява динамично
-  const endDate = new Date().toISOString().split('T')[0];
-
-  try {
-    const usageResponse = await fetch(`https://api.openai.com/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      }
-    });
-
-    const usageData = await usageResponse.json();
-
-    // Приблизителен лимит – 90,000 токена
-    const used = Math.round(usageData.total_usage / 0.00001); // или вземи направо токени ако имаш по-прецизен метод
-    const remaining = 90000 - used;
-
-    res.json({ used, remaining });
-  } catch (err) {
-    console.error('Error fetching usage:', err);
-    res.status(500).json({ error: 'Failed to fetch usage' });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
-});
-
-const express = require('express');
+// ➕ Добави това някъде в server.js – САМО ЕДИН ПЪТ
 const fetch = require('node-fetch');
-require('dotenv').config();
 
-const app = express();
-app.use(express.json());
-
+// ✅ Този endpoint връща токен usage за графиката
 app.post('/usage', async (req, res) => {
-  const startDate = '2025-05-01';
+  const startDate = '2025-05-01'; // Може да стане динамично ако искаш
   const endDate = new Date().toISOString().split('T')[0];
+
   try {
     const usageResponse = await fetch(`https://api.openai.com/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
       headers: {
@@ -277,20 +246,19 @@ app.post('/usage', async (req, res) => {
 
     const usageData = await usageResponse.json();
 
-    const estimatedTokenCostPer1K = 0.01; // приблизително за gpt-4o
+    // Преобразуване от USD към токени (0.01$/1K токена приблизително)
+    const estimatedTokenCostPer1K = 0.01;
     const used = Math.round((usageData.total_usage || 0) / estimatedTokenCostPer1K);
     const remaining = 90000 - used;
 
     res.json({ used, remaining });
   } catch (err) {
-    console.error('Error fetching usage:', err);
+    console.error('❌ Error fetching usage:', err);
     res.status(500).json({ error: 'Failed to fetch usage' });
   }
 });
 
-// ... останалите маршрути
-
-const PORT = process.env.PORT || 10000;
+// ✅ Това трябва да бъде САМО веднъж в края на файла:
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
