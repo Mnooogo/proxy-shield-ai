@@ -1,4 +1,4 @@
-// ✅ Full Proxy Shield AI server.js with ALL protections and logic integrated
+// ✅ Full Proxy Shield AI server.js – Complete, Hardened Edition
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
@@ -9,6 +9,7 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
+const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -20,19 +21,20 @@ const GPT_SECRET = process.env.GPT_SECRET;
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
+// 🔐 Storage paths
 const blockedPath = path.join(__dirname, 'blocked.json');
-let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath, 'utf8')) : {};
-function saveBlocked() { fs.writeFileSync(blockedPath, JSON.stringify(blockedIPs, null, 2)); }
-
 const usagePath = path.join(__dirname, 'usage.json');
-let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : {};
-function saveUsage() { fs.writeFileSync(usagePath, JSON.stringify(usageData, null, 2)); }
-
 const requestCountPath = path.join(__dirname, 'requests.json');
+const logPath = path.join(__dirname, 'proxy_log.txt');
+
+let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath, 'utf8')) : {};
+let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : {};
 let requestsPerDay = fs.existsSync(requestCountPath) ? JSON.parse(fs.readFileSync(requestCountPath, 'utf8')) : {};
+
+function saveBlocked() { fs.writeFileSync(blockedPath, JSON.stringify(blockedIPs, null, 2)); }
+function saveUsage() { fs.writeFileSync(usagePath, JSON.stringify(usageData, null, 2)); }
 function saveRequestCount() { fs.writeFileSync(requestCountPath, JSON.stringify(requestsPerDay, null, 2)); }
 
-const logPath = path.join(__dirname, 'proxy_log.txt');
 function logActivity(entry) {
   const logEntry = `[${new Date().toISOString()}] ${entry}\n`;
   fs.appendFileSync(logPath, logEntry);
@@ -96,7 +98,10 @@ app.get('/logs', authenticateJWT, (req, res) => {
   });
 });
 
-// ✅ Full proxy endpoint for external clients
+app.get('/token-stats', authenticateJWT, (req, res) => {
+  res.json(usageData);
+});
+
 app.post('/proxy', async (req, res) => {
   const ip = req.ip;
   const now = Date.now();
@@ -109,17 +114,26 @@ app.post('/proxy', async (req, res) => {
     saveBlocked();
   }
 
-  const { apiKey, messages, model } = req.body;
+  const { apiKey, messages, model, max_tokens } = req.body;
   if (!apiKey || !messages || !model) {
     logActivity(`Invalid request from ${ip}`);
     return res.status(400).json({ error: 'Missing required fields.' });
+  }
+
+  if (max_tokens && max_tokens > 1000) {
+    return res.status(400).json({ error: 'Max tokens limit exceeded.' });
+  }
+
+  const dailyTotal = Object.values(usageData).reduce((a, b) => a + b, 0);
+  if (dailyTotal > 30000) {
+    return res.status(429).json({ error: 'Site-wide token limit reached for today.' });
   }
 
   requestsPerDay[ip] = (requestsPerDay[ip] || 0) + 1;
   saveRequestCount();
 
   if (requestsPerDay[ip] > 100) {
-    blockedIPs[ip] = now + 24 * 60 * 60 * 1000;
+    blockedIPs[ip] = now + 86400000;
     saveBlocked();
     logActivity(`⛔ IP ${ip} blocked for exceeding daily request limit`);
     return res.status(429).json({ error: 'You have been temporarily blocked for 24 hours.' });
@@ -137,15 +151,15 @@ app.post('/proxy', async (req, res) => {
 
   try {
     const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model, messages },
-      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } });
+      { model, messages, max_tokens },
+      { headers: { Authorization: `Bearer ${apiKey}` } });
 
     const tokenUsed = response.data?.usage?.total_tokens || 0;
     usageData[ip] = (usageData[ip] || 0) + tokenUsed;
     saveUsage();
 
     if (usageData[ip] > 5000) {
-      blockedIPs[ip] = now + 24 * 60 * 60 * 1000;
+      blockedIPs[ip] = now + 86400000;
       saveBlocked();
       logActivity(`⛔ IP ${ip} blocked for exceeding token limit`);
       return res.status(429).json({ error: 'Token limit exceeded. Blocked 24h.' });
@@ -159,23 +173,31 @@ app.post('/proxy', async (req, res) => {
   }
 });
 
-// ✅ Protected /chat endpoint
 app.post('/chat', checkGPTSecret, async (req, res) => {
-  const { messages, model } = req.body;
-  if (!messages) return res.status(400).json({ error: 'Missing messages' });
-
+  const { messages, model, max_tokens } = req.body;
   const ip = req.ip;
   const selectedModel = model || 'gpt-4';
   const now = Date.now();
+
+  if (!messages) return res.status(400).json({ error: 'Missing messages' });
 
   if (blockedIPs[ip] && blockedIPs[ip] > now) {
     return res.status(403).json({ error: '⛔ Your IP is temporarily blocked.' });
   }
 
+  if (max_tokens && max_tokens > 1000) {
+    return res.status(400).json({ error: 'Max tokens limit exceeded.' });
+  }
+
+  const dailyTotal = Object.values(usageData).reduce((a, b) => a + b, 0);
+  if (dailyTotal > 30000) {
+    return res.status(429).json({ error: 'Site-wide token limit reached for today.' });
+  }
+
   try {
     const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model: selectedModel, messages },
-      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' } });
+      { model: selectedModel, messages, max_tokens },
+      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
 
     const reply = response.data.choices[0]?.message?.content || 'No reply generated.';
     const tokenUsed = response.data?.usage?.total_tokens || 0;
@@ -184,7 +206,7 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
     saveUsage();
 
     if (usageData[ip] > 5000) {
-      blockedIPs[ip] = now + 24 * 60 * 60 * 1000;
+      blockedIPs[ip] = now + 86400000;
       saveBlocked();
       logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
       return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
@@ -229,36 +251,6 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🔁 Daily reset of usage and request count.');
 });
 
-// ➕ Добави това някъде в server.js – САМО ЕДИН ПЪТ
-const fetch = require('node-fetch');
-
-// ✅ Този endpoint връща токен usage за графиката
-app.post('/usage', async (req, res) => {
-  const startDate = '2025-05-01'; // Може да стане динамично ако искаш
-  const endDate = new Date().toISOString().split('T')[0];
-
-  try {
-    const usageResponse = await fetch(`https://api.openai.com/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      }
-    });
-
-    const usageData = await usageResponse.json();
-
-    // Преобразуване от USD към токени (0.01$/1K токена приблизително)
-    const estimatedTokenCostPer1K = 0.01;
-    const used = Math.round((usageData.total_usage || 0) / estimatedTokenCostPer1K);
-    const remaining = 90000 - used;
-
-    res.json({ used, remaining });
-  } catch (err) {
-    console.error('❌ Error fetching usage:', err);
-    res.status(500).json({ error: 'Failed to fetch usage' });
-  }
-});
-
-// ✅ Това трябва да бъде САМО веднъж в края на файла:
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
