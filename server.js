@@ -257,3 +257,40 @@ app.post('/usage', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
+
+const express = require('express');
+const fetch = require('node-fetch');
+require('dotenv').config();
+
+const app = express();
+app.use(express.json());
+
+app.post('/usage', async (req, res) => {
+  const startDate = '2025-05-01';
+  const endDate = new Date().toISOString().split('T')[0];
+  try {
+    const usageResponse = await fetch(`https://api.openai.com/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      }
+    });
+
+    const usageData = await usageResponse.json();
+
+    const estimatedTokenCostPer1K = 0.01; // приблизително за gpt-4o
+    const used = Math.round((usageData.total_usage || 0) / estimatedTokenCostPer1K);
+    const remaining = 90000 - used;
+
+    res.json({ used, remaining });
+  } catch (err) {
+    console.error('Error fetching usage:', err);
+    res.status(500).json({ error: 'Failed to fetch usage' });
+  }
+});
+
+// ... останалите маршрути
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
+});
