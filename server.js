@@ -21,7 +21,6 @@ const GPT_SECRET = process.env.GPT_SECRET;
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
-// 🔐 Storage paths
 const blockedPath = path.join(__dirname, 'blocked.json');
 const usagePath = path.join(__dirname, 'usage.json');
 const requestCountPath = path.join(__dirname, 'requests.json');
@@ -40,6 +39,18 @@ function logActivity(entry) {
   fs.appendFileSync(logPath, logEntry);
 }
 
+async function sendTelegramAlert(msg) {
+  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
+  try {
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: `🚨 Proxy Alert:\n${msg}`,
+    });
+  } catch (err) {
+    console.error('❌ Telegram alert failed:', err.message);
+  }
+}
+
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -56,18 +67,6 @@ function checkGPTSecret(req, res, next) {
     return res.status(403).json({ error: 'Unauthorized – invalid GPT secret.' });
   }
   next();
-}
-
-async function sendTelegramAlert(msg) {
-  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
-  try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: TELEGRAM_CHAT_ID,
-      text: `🚨 Proxy Alert:\n${msg}`,
-    });
-  } catch (err) {
-    console.error('❌ Telegram alert failed:', err.message);
-  }
 }
 
 const users = [];
@@ -102,22 +101,16 @@ app.get('/token-stats', authenticateJWT, (req, res) => {
   res.json(usageData);
 });
 
-app.post('/proxy', async (req, res) => {
+app.post('/chat', checkGPTSecret, async (req, res) => {
+  const { messages, max_tokens } = req.body;
   const ip = req.ip;
+  const model = 'gpt-3.5-turbo';
   const now = Date.now();
 
-  if (blockedIPs[ip] && blockedIPs[ip] > now) {
-    logActivity(`⛔ BLOCKED: ${ip} tried to access during ban`);
-    return res.status(403).json({ error: 'Your IP is temporarily blocked.' });
-  } else if (blockedIPs[ip] && blockedIPs[ip] <= now) {
-    delete blockedIPs[ip];
-    saveBlocked();
-  }
+  if (!messages) return res.status(400).json({ error: 'Missing messages' });
 
-  const { apiKey, messages, model, max_tokens } = req.body;
-  if (!apiKey || !messages || !model) {
-    logActivity(`Invalid request from ${ip}`);
-    return res.status(400).json({ error: 'Missing required fields.' });
+  if (blockedIPs[ip] && blockedIPs[ip] > now) {
+    return res.status(403).json({ error: '⛔ Your IP is temporarily blocked.' });
   }
 
   if (max_tokens && max_tokens > 1000) {
@@ -125,18 +118,8 @@ app.post('/proxy', async (req, res) => {
   }
 
   const dailyTotal = Object.values(usageData).reduce((a, b) => a + b, 0);
-  if (dailyTotal > 30000) {
+  if (dailyTotal > 150000) {
     return res.status(429).json({ error: 'Site-wide token limit reached for today.' });
-  }
-
-  requestsPerDay[ip] = (requestsPerDay[ip] || 0) + 1;
-  saveRequestCount();
-
-  if (requestsPerDay[ip] > 100) {
-    blockedIPs[ip] = now + 86400000;
-    saveBlocked();
-    logActivity(`⛔ IP ${ip} blocked for exceeding daily request limit`);
-    return res.status(429).json({ error: 'You have been temporarily blocked for 24 hours.' });
   }
 
   ipTimestamps[ip] = ipTimestamps[ip] || [];
@@ -152,51 +135,6 @@ app.post('/proxy', async (req, res) => {
   try {
     const response = await axios.post('https://api.openai.com/v1/chat/completions',
       { model, messages, max_tokens },
-      { headers: { Authorization: `Bearer ${apiKey}` } });
-
-    const tokenUsed = response.data?.usage?.total_tokens || 0;
-    usageData[ip] = (usageData[ip] || 0) + tokenUsed;
-    saveUsage();
-
-    if (usageData[ip] > 5000) {
-      blockedIPs[ip] = now + 86400000;
-      saveBlocked();
-      logActivity(`⛔ IP ${ip} blocked for exceeding token limit`);
-      return res.status(429).json({ error: 'Token limit exceeded. Blocked 24h.' });
-    }
-
-    logActivity(`✅ ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
-    if (!res.headersSent) res.json(response.data);
-  } catch (err) {
-    logActivity(`❌ Proxy error for ${ip} | ${err.message}`);
-    if (!res.headersSent) res.status(500).json({ error: 'Proxy error', details: err.message });
-  }
-});
-
-app.post('/chat', checkGPTSecret, async (req, res) => {
-  const { messages, model, max_tokens } = req.body;
-  const ip = req.ip;
-  const selectedModel = model || 'gpt-4';
-  const now = Date.now();
-
-  if (!messages) return res.status(400).json({ error: 'Missing messages' });
-
-  if (blockedIPs[ip] && blockedIPs[ip] > now) {
-    return res.status(403).json({ error: '⛔ Your IP is temporarily blocked.' });
-  }
-
-  if (max_tokens && max_tokens > 1000) {
-    return res.status(400).json({ error: 'Max tokens limit exceeded.' });
-  }
-
-  const dailyTotal = Object.values(usageData).reduce((a, b) => a + b, 0);
-  if (dailyTotal > 30000) {
-    return res.status(429).json({ error: 'Site-wide token limit reached for today.' });
-  }
-
-  try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model: selectedModel, messages, max_tokens },
       { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
 
     const reply = response.data.choices[0]?.message?.content || 'No reply generated.';
@@ -205,7 +143,7 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
     usageData[ip] = (usageData[ip] || 0) + tokenUsed;
     saveUsage();
 
-    if (usageData[ip] > 5000) {
+    if (usageData[ip] > 10000) {
       blockedIPs[ip] = now + 86400000;
       saveBlocked();
       logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
@@ -217,29 +155,6 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   } catch (err) {
     logActivity(`❌ /chat error for ${ip} | ${err.message}`);
     if (!res.headersSent) res.status(500).json({ error: 'Chat error', details: err.message });
-  }
-});
-
-app.post('/api/vision', checkGPTSecret, async (req, res) => {
-  const { imageBase64 } = req.body;
-  try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: 'You are a material expert. Identify the material in the image.' },
-        {
-          role: 'user',
-          content: [ { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } } ]
-        }
-      ],
-      max_tokens: 100
-    }, {
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
-    });
-    if (!res.headersSent) res.json(response.data);
-  } catch (error) {
-    console.error('❌ Vision API error:', error.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Vision API failed' });
   }
 });
 
