@@ -18,6 +18,12 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GPT_SECRET = process.env.GPT_SECRET;
 
+const twilio = require('twilio');
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+let activeCodes = {};
+
+
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
@@ -166,6 +172,44 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🔁 Daily reset of usage and request count.');
 });
 
+app.post('/send-code', async (req, res) => {
+  const { phoneNumber } = req.body;
+
+  if (!phoneNumber) {
+    return res.status(400).json({ success: false, message: 'Phone number required.' });
+  }
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  activeCodes[phoneNumber] = code;
+
+  try {
+    const message = await client.messages.create({
+      body: `🔐 Your access code is: ${code}`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: phoneNumber
+    });
+
+    console.log('✅ SMS sent:', message.sid);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Twilio error:', error);
+    res.status(500).json({ success: false, message: 'Failed to send SMS.' });
+  }
+});
+app.post('/verify-code', (req, res) => {
+  const { phoneNumber, code } = req.body;
+
+  if (!phoneNumber || !code) {
+    return res.status(400).json({ success: false, message: 'Phone number and code are required.' });
+  }
+
+  if (activeCodes[phoneNumber] && activeCodes[phoneNumber] === code) {
+    delete activeCodes[phoneNumber]; // 🔐 Кодът е използван, махаме го
+    return res.json({ success: true, message: '✅ Code verified. Access granted.' });
+  } else {
+    return res.status(401).json({ success: false, message: '❌ Invalid or expired code.' });
+  }
+});
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
