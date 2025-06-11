@@ -190,6 +190,10 @@ app.post('/send-code', async (req, res) => {
     });
 
     console.log('✅ SMS sent:', message.sid);
+    +  📨 Telegram известие за изпратен код
++   await sendTelegramAlert(`📨 SMS code sent to ${phoneNumber}: ${code}`);
++   // 🟨 Запис в лог файла
++   logActivity(`📨 Sent code ${code} to ${phoneNumber}`);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Twilio error:', error);
@@ -203,12 +207,20 @@ app.post('/verify-code', (req, res) => {
     return res.status(400).json({ success: false, message: 'Phone number and code are required.' });
   }
 
-  if (activeCodes[phoneNumber] && activeCodes[phoneNumber] === code) {
-    delete activeCodes[phoneNumber]; // 🔐 Кодът е използван, махаме го
-    return res.json({ success: true, message: '✅ Code verified. Access granted.' });
-  } else {
-    return res.status(401).json({ success: false, message: '❌ Invalid or expired code.' });
-  }
+ + if (activeCodes[phoneNumber] && activeCodes[phoneNumber] === code) {
++   delete activeCodes[phoneNumber];
++   // 📨 Telegram известие за успешна верификация
++   await sendTelegramAlert(`✅ Code verified for ${phoneNumber}`);
++   // 🟨 Запис в лог файла
++   logActivity(`✅ Verified code for ${phoneNumber}`);
++   return res.json({ success: true, message: '✅ Code verified. Access granted.' });
++ } else {
++   // 📨 Telegram известие за неуспешен опит
++   await sendTelegramAlert(`❌ Failed attempt with code "${code}" for ${phoneNumber}`);
++   // 🟨 Запис в лог файла
++   logActivity(`❌ Invalid code "${code}" for ${phoneNumber}`);
++   return res.status(401).json({ success: false, message: '❌ Invalid or expired code.' });
++ }
 });
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
