@@ -220,6 +220,8 @@ app.post('/verify-code', async (req, res) => {
 
   if (activeCodes[phoneNumber] && activeCodes[phoneNumber] === code) {
     delete activeCodes[phoneNumber];
+    req.session.verified = true;
+
     await sendTelegramAlert(`✅ Code verified for ${phoneNumber}`);
     logActivity(`✅ Verified code for ${phoneNumber}`);
     return res.json({ success: true, message: '✅ Code verified. Access granted.' });
