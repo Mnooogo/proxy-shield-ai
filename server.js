@@ -1,4 +1,4 @@
-// ✅ Full Proxy Shield AI server.js – Complete, Hardened Edition
+// ✅ Proxy Shield AI – GPT + Telegram Version (No SMS services)
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
@@ -9,44 +9,42 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
-const fetch = require('node-fetch');
+const session = require('express-session');
 
 const app = express();
-const session = require('express-session');
+const PORT = process.env.PORT || 10000;
+
+const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const GPT_SECRET = process.env.GPT_SECRET;
+
+let activeCodes = {};
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'immigrant_secret_session_key',
   resave: false,
   saveUninitialized: true,
   cookie: {
-    maxAge: 24 * 60 * 60 * 1000, // 24 часа
+    maxAge: 24 * 60 * 60 * 1000,
     httpOnly: true,
-    secure: false  // направи го true ако ползваш HTTPS
+    secure: false
   }
 }));
-
-const PORT = process.env.PORT || 10000;
-const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const GPT_SECRET = process.env.GPT_SECRET;
-
-const twilio = require('twilio');
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-
-let activeCodes = {};
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
+// File paths
 const blockedPath = path.join(__dirname, 'blocked.json');
 const usagePath = path.join(__dirname, 'usage.json');
 const requestCountPath = path.join(__dirname, 'requests.json');
 const logPath = path.join(__dirname, 'proxy_log.txt');
 
-let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath, 'utf8')) : {};
-let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : {};
-let requestsPerDay = fs.existsSync(requestCountPath) ? JSON.parse(fs.readFileSync(requestCountPath, 'utf8')) : {};
+// Load or init
+let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath)) : {};
+let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath)) : {};
+let requestsPerDay = fs.existsSync(requestCountPath) ? JSON.parse(fs.readFileSync(requestCountPath)) : {};
 
 function saveBlocked() { fs.writeFileSync(blockedPath, JSON.stringify(blockedIPs, null, 2)); }
 function saveUsage() { fs.writeFileSync(usagePath, JSON.stringify(usageData, null, 2)); }
@@ -62,13 +60,14 @@ async function sendTelegramAlert(msg) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: TELEGRAM_CHAT_ID,
-      text: `🚨 Proxy Alert:\n${msg}`,
+      text: msg,
     });
   } catch (err) {
     console.error('❌ Telegram alert failed:', err.message);
   }
 }
 
+// Rate limiting
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -76,8 +75,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-const ipTimestamps = {};
-
+// GPT Secret middleware
 function checkGPTSecret(req, res, next) {
   const secret = req.headers['x-secret'];
   if (!secret || secret !== GPT_SECRET) {
@@ -87,6 +85,7 @@ function checkGPTSecret(req, res, next) {
   next();
 }
 
+// Admin user setup
 const users = [];
 const setupUser = () => {
   const username = process.env.ADMIN_USER || 'adminSTEF';
@@ -103,11 +102,12 @@ function authenticateJWT(req, res, next) {
     const token = authHeader.split(' ')[1];
     req.user = jwt.verify(token, JWT_SECRET);
     next();
-  } catch (err) {
+  } catch {
     return res.status(403).json({ error: 'Invalid token' });
   }
 }
 
+// Log and stats
 app.get('/logs', authenticateJWT, (req, res) => {
   fs.readFile(logPath, 'utf8', (err, data) => {
     if (err) return res.status(500).send('Error reading log.');
@@ -119,11 +119,12 @@ app.get('/token-stats', authenticateJWT, (req, res) => {
   res.json(usageData);
 });
 
+// GPT chat endpoint
 app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, max_tokens } = req.body;
   const ip = req.ip;
-  const model = 'gpt-3.5-turbo';
   const now = Date.now();
+  const model = 'gpt-3.5-turbo';
 
   if (!messages) return res.status(400).json({ error: 'Missing messages' });
 
@@ -140,12 +141,12 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
     return res.status(429).json({ error: 'Site-wide token limit reached for today.' });
   }
 
-  ipTimestamps[ip] = ipTimestamps[ip] || [];
-  ipTimestamps[ip].push(now);
-  ipTimestamps[ip] = ipTimestamps[ip].filter(ts => now - ts < 10000);
+  const timestamps = requestsPerDay[ip] || [];
+  timestamps.push(now);
+  requestsPerDay[ip] = timestamps.filter(ts => now - ts < 10000);
 
-  if (ipTimestamps[ip].length > 5) {
-    const alertMsg = `🚨 Suspicious activity from ${ip} – ${ipTimestamps[ip].length} requests in 10s`;
+  if (requestsPerDay[ip].length > 5) {
+    const alertMsg = `🚨 Suspicious activity from ${ip} – ${timestamps.length} requests in 10s`;
     logActivity(alertMsg);
     sendTelegramAlert(alertMsg);
   }
@@ -169,13 +170,14 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
     }
 
     logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
-    if (!res.headersSent) res.json({ reply });
+    res.json({ reply });
   } catch (err) {
     logActivity(`❌ /chat error for ${ip} | ${err.message}`);
-    if (!res.headersSent) res.status(500).json({ error: 'Chat error', details: err.message });
+    res.status(500).json({ error: 'Chat error', details: err.message });
   }
 });
 
+// Reset daily usage
 cron.schedule('0 0 * * *', () => {
   usageData = {};
   requestsPerDay = {};
@@ -184,52 +186,41 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🔁 Daily reset of usage and request count.');
 });
 
+// ✅ Telegram-based verification endpoints
 app.post('/send-code', async (req, res) => {
   const { phoneNumber } = req.body;
 
   if (!phoneNumber) {
-    return res.status(400).json({ success: false, message: 'Phone number required.' });
+    return res.status(400).json({ success: false, message: 'Phone number or user ID required.' });
   }
 
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   activeCodes[phoneNumber] = code;
 
-  try {
-    const message = await client.messages.create({
-      body: `🔐 Your access code is: ${code}`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: phoneNumber
-    });
-
-    console.log('✅ SMS sent:', message.sid);
-    await sendTelegramAlert(`📨 SMS code sent to ${phoneNumber}: ${code}`);
-    logActivity(`📨 Sent code ${code} to ${phoneNumber}`);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('❌ Twilio error:', error);
-    res.status(500).json({ success: false, message: 'Failed to send SMS.' });
-  }
+  await sendTelegramAlert(`📬 Access code for ${phoneNumber}: ${code}`);
+  logActivity(`📬 Code ${code} generated for ${phoneNumber}`);
+  res.json({ success: true });
 });
 
 app.post('/verify-code', async (req, res) => {
   const { phoneNumber, code } = req.body;
 
   if (!phoneNumber || !code) {
-    return res.status(400).json({ success: false, message: 'Phone number and code are required.' });
+    return res.status(400).json({ success: false, message: 'Missing phone or code.' });
   }
 
-  if (activeCodes[phoneNumber] && activeCodes[phoneNumber] === code) {
+  if (activeCodes[phoneNumber] === code) {
     delete activeCodes[phoneNumber];
     req.session.verified = true;
 
     await sendTelegramAlert(`✅ Code verified for ${phoneNumber}`);
     logActivity(`✅ Verified code for ${phoneNumber}`);
-    return res.json({ success: true, message: '✅ Code verified. Access granted.' });
-  } else {
-    await sendTelegramAlert(`❌ Failed attempt with code "${code}" for ${phoneNumber}`);
-    logActivity(`❌ Invalid code "${code}" for ${phoneNumber}`);
-    return res.status(401).json({ success: false, message: '❌ Invalid or expired code.' });
+    return res.json({ success: true, message: 'Access granted.' });
   }
+
+  await sendTelegramAlert(`❌ Invalid code "${code}" for ${phoneNumber}`);
+  logActivity(`❌ Invalid code "${code}" for ${phoneNumber}`);
+  res.status(401).json({ success: false, message: 'Invalid or expired code.' });
 });
 
 app.listen(PORT, () => {
