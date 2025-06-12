@@ -12,6 +12,19 @@ const cron = require('node-cron');
 const fetch = require('node-fetch');
 
 const app = express();
+const session = require('express-session');
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'immigrant_secret_session_key',
+  resave: false,
+  saveUninitialized: true,
+  cookie: {
+    maxAge: 24 * 60 * 60 * 1000, // 24 часа
+    httpOnly: true,
+    secure: false  // направи го true ако ползваш HTTPS
+  }
+}));
+
 const PORT = process.env.PORT || 10000;
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
