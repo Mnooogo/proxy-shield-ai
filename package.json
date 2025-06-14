@@ -31,8 +31,7 @@
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.6.11",
-    "plivo": "^4.70.0",
-    "twilio": "^5.7.0"
+    "stripe": "^14.0.0"
   },
   "build": {
     "appId": "proxy-shield-ai",
