@@ -236,6 +236,22 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, 
   res.status(200).send('✅ Webhook received');
 });
 
+const { queryGnm } = require('./gnm/gnm-query'); // създаваме тази функция
+
+app.post('/gnm-query', checkGPTSecret, async (req, res) => {
+  const { query } = req.body;
+  if (!query) return res.status(400).json({ error: 'Missing query input.' });
+
+  try {
+    const result = await queryGnm(query);
+    res.json({ result });
+  } catch (err) {
+    logActivity(`❌ GNM query failed: ${err.message}`);
+    res.status(500).json({ error: 'GNM query failed', details: err.message });
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
