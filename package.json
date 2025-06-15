@@ -20,6 +20,10 @@
     "globals": "^16.1.0"
   },
   "dependencies": {
+    "chromadb": "^0.3.0",
+    "pdf-parse": "^1.1.1",
+    "langchain": "^0.1.26",
+    "openai": "^4.10.0"
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.2",
