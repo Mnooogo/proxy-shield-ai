@@ -4,14 +4,13 @@
   "description": "proxyshieldai",
   "author": "Stefan Spasov <info@vetom.bg>",
   "main": "main.js",
- "scripts": {
-  "start": "node gnm/gnm-query.js",
-  "electron": "electron .",
-  "build": "electron-builder build",
-  "dist": "electron-builder",
-  "test": "echo \"Error: no test specified\" && exit 1"
-},
-
+  "scripts": {
+    "start": "electron .",
+    "gnm": "node gnm/gnm-query.js",
+    "build": "electron-builder build",
+    "dist": "electron-builder",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "keywords": [],
   "license": "ISC",
   "devDependencies": {
@@ -21,25 +20,24 @@
     "eslint": "^9.26.0",
     "globals": "^16.1.0"
   },
- "dependencies": {
-  "chromadb": "^0.3.0",
-  "pdf-parse": "^1.1.1",
-  "langchain": "^0.1.26",
-  "openai": "^4.10.0",
-  "axios": "^1.9.0",
-  "bcrypt": "^5.1.1",
-  "body-parser": "^1.20.2",
-  "cors": "^2.8.5",
-  "dotenv": "^16.5.0",
-  "express": "^4.21.2",
-  "express-rate-limit": "^7.5.0",
-  "express-session": "^1.17.3",
-  "jsonwebtoken": "^9.0.2",
-  "node-cron": "^3.0.3",
-  "node-fetch": "^2.6.11",
-  "stripe": "^14.0.0"
-}
-,
+  "dependencies": {
+    "chromadb": "^0.3.0",
+    "pdf-parse": "^1.1.1",
+    "langchain": "^0.1.26",
+    "openai": "^4.10.0",
+    "axios": "^1.9.0",
+    "bcrypt": "^5.1.1",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-session": "^1.17.3",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.6.11",
+    "stripe": "^14.0.0"
+  },
   "build": {
     "appId": "proxy-shield-ai",
     "productName": "Proxy Shield AI",
