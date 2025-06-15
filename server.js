@@ -151,11 +151,20 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
       { model, messages, max_tokens },
       { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
 
-    const reply = response.data.choices[0]?.message?.content || 'No reply generated.';
-    const tokenUsed = response.data?.usage?.total_tokens || 0;
+ const reply = response.data.choices[0]?.message?.content?.trim();
 
-    usageData[ip] = (usageData[ip] || 0) + tokenUsed;
-    saveUsage();
+if (!reply) {
+  logActivity(`⚠️ GPT replied empty for IP ${ip} | Response dump: ${JSON.stringify(response.data)}`);
+  return res.json({
+    reply: '🌱 I wasn’t able to find the right words just now. Can you ask me in another way?'
+  });
+}
+
+const tokenUsed = response.data?.usage?.total_tokens || 0;
+
+usageData[ip] = (usageData[ip] || 0) + tokenUsed;
+saveUsage();
+
 
     if (usageData[ip] > 10000) {
       blockedIPs[ip] = now + 86400000;
