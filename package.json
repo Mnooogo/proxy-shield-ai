@@ -9,6 +9,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "electron-builder build",
     "dist": "electron-builder"
+    "start": "node gnm/gnm-query.js"
   },
   "keywords": [],
   "license": "ISC",
