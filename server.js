@@ -125,14 +125,13 @@ app.get('/token-stats', authenticateJWT, (req, res) => {
 });
 
 app.post('/chat', checkGPTSecret, async (req, res) => {
-  const { messages, max_tokens } = req.body;
+  const { messages, max_tokens, vector_namespace } = req.body;
   const ip = req.ip;
   const now = Date.now();
   const model = 'gpt-4o';
 
   if (!messages) return res.status(400).json({ error: 'Missing messages' });
   if (blockedIPs[ip] && blockedIPs[ip] > now) return res.status(403).json({ error: '⛔ Your IP is temporarily blocked.' });
-  if (max_tokens && max_tokens > 1000) return res.status(400).json({ error: 'Max tokens limit exceeded.' });
 
   const dailyTotal = Object.values(usageData).reduce((a, b) => a + b, 0);
   if (dailyTotal > 150000) return res.status(429).json({ error: 'Site-wide token limit reached for today.' });
@@ -147,24 +146,22 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   }
 
   try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model, messages, max_tokens },
-      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
+    let reply = "No response";
 
- const reply = response.data.choices[0]?.message?.content?.trim();
+    // 🧠 Ако идва заявка за GNM, пусни query към GNM vector база
+    if (vector_namespace === "gnm") {
+      const userMessage = messages.find(m => m.role === "user")?.content || "No question";
+      reply = await queryGnm(userMessage);
+    } else {
+      const response = await axios.post('https://api.openai.com/v1/chat/completions',
+        { model, messages, max_tokens },
+        { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
+      reply = response.data.choices[0]?.message?.content?.trim();
+    }
 
-if (!reply) {
-  logActivity(`⚠️ GPT replied empty for IP ${ip} | Response dump: ${JSON.stringify(response.data)}`);
-  return res.json({
-    reply: '🌱 I wasn’t able to find the right words just now. Can you ask me in another way?'
-  });
-}
-
-const tokenUsed = response.data?.usage?.total_tokens || 0;
-
-usageData[ip] = (usageData[ip] || 0) + tokenUsed;
-saveUsage();
-
+    const tokenUsed = response.data?.usage?.total_tokens || 0;
+    usageData[ip] = (usageData[ip] || 0) + tokenUsed;
+    saveUsage();
 
     if (usageData[ip] > 10000) {
       blockedIPs[ip] = now + 86400000;
