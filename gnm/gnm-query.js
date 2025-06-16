@@ -1,21 +1,21 @@
-// /gnm/gnm-query.js
-
+// ✅ /gnm/gnm-query.js (final version with local ChromaDB)
 const path = require("path");
-const { PDFLoader } = require("langchain/document_loaders/fs/pdf");
-const { OpenAIEmbeddings, OpenAI } = require("@langchain/openai");
 const { Chroma } = require("@langchain/community/vectorstores/chroma");
+const { OpenAIEmbeddings } = require("@langchain/openai");
 const { RetrievalQAChain } = require("langchain/chains");
+const { OpenAI } = require("@langchain/openai");
 
 const queryGnm = async (question) => {
-  const loader = new PDFLoader(path.join(__dirname, "System prompt German new medicine.pdf"));
-  const docs = await loader.load();
-
-  const vectorStore = await Chroma.fromDocuments(docs, new OpenAIEmbeddings({
-    openAIApiKey: process.env.OPENAI_API_KEY
-  }));
+  const vectorStore = await Chroma.fromExistingIndex(
+    new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY }),
+    { 
+      collectionName: "gnm-docs",
+      indexPath: path.join(__dirname, "db")
+    }
+  );
 
   const chain = RetrievalQAChain.fromLLM(
-    new OpenAI({ openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0 }),
+    new OpenAI({ openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0.2 }),
     vectorStore.asRetriever()
   );
 
@@ -24,3 +24,4 @@ const queryGnm = async (question) => {
 };
 
 module.exports = { queryGnm };
+
