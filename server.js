@@ -235,8 +235,7 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, 
 
   res.status(200).send('✅ Webhook received');
 });
-
-const { queryGnm } = require('./gnm/gnm-query'); // създаваме тази функция
+const { queryGnm } = require('./gnm/gnm-query');
 
 app.post('/gnm-query', checkGPTSecret, async (req, res) => {
   const { query } = req.body;
@@ -250,6 +249,7 @@ app.post('/gnm-query', checkGPTSecret, async (req, res) => {
     res.status(500).json({ error: 'GNM query failed', details: err.message });
   }
 });
+
 
 
 app.listen(PORT, () => {
