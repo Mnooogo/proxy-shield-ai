@@ -1,27 +1,30 @@
-// ✅ /gnm/gnm-query.js (final version with local ChromaDB)
+// ✅ gnm/gnm-loader.js – само за първоначално генериране на db
 const path = require("path");
-const { Chroma } = require("@langchain/community/vectorstores/chroma");
+const fs = require("fs");
 const { OpenAIEmbeddings } = require("@langchain/openai");
-const { RetrievalQAChain } = require("langchain/chains");
-const { OpenAI } = require("@langchain/openai");
+const { Chroma } = require("@langchain/community/vectorstores/chroma");
+const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
+const { Document } = require("langchain/document");
 
-const queryGnm = async (question) => {
-  const vectorStore = await Chroma.fromExistingIndex(
-    new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY }),
-    { 
-      collectionName: "gnm-docs",
-      indexPath: path.join(__dirname, "db")
-    }
-  );
+// ✅ Зареждаме JSON fallback (може и от PDF)
+const gnmJson = JSON.parse(fs.readFileSync(path.join(__dirname, "gnm-knowledge.json"), "utf8"));
 
-  const chain = RetrievalQAChain.fromLLM(
-    new OpenAI({ openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0.2 }),
-    vectorStore.asRetriever()
-  );
+// 🔍 Превръщаме в документи
+const docs = gnmJson.map(entry => new Document({ pageContent: `${entry.question}\n${entry.answer}` }));
 
-  const response = await chain.call({ query: question });
-  return response.text;
-};
+// ✅ Разбиване на фрагменти (ако искаш по-фин контрол)
+const splitter = new RecursiveCharacterTextSplitter({ chunkSize: 300, chunkOverlap: 30 });
 
-module.exports = { queryGnm };
+async function run() {
+  const splitDocs = await splitter.splitDocuments(docs);
+  const embeddings = new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY });
 
+  await Chroma.fromDocuments(splitDocs, embeddings, {
+    collectionName: "gnm-docs",
+    indexPath: path.join(__dirname, "db")  // 👉 записва тук
+  });
+
+  console.log("✅ GNM index created at /gnm/db");
+}
+
+run();
