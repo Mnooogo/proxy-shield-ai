@@ -1,29 +1,25 @@
-// gnm/gnm-query.js
+const path = require("path");
+const { PDFLoader } = require("langchain/document_loaders/fs/pdf");
+const { OpenAIEmbeddings } = require("langchain/embeddings/openai");
+const { Chroma } = require("langchain/vectorstores/chroma");
+const { RetrievalQAChain } = require("langchain/chains");
+const { OpenAI } = require("langchain/llms/openai");
 
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
-import { RetrievalQAChain } from "langchain/chains";
-import { OpenAI } from "langchain/llms/openai";
-import { Chroma } from "langchain/vectorstores/chroma";
-import { ChromaClient } from "langchain/vectorstores/chroma";
-import * as dotenv from "dotenv";
-dotenv.config();
+const queryGnm = async (question) => {
+  const loader = new PDFLoader(path.join(__dirname, "System prompt German new medicine.pdf"));
+  const docs = await loader.load();
 
-const client = new ChromaClient();
-const collectionName = "gnm-docs"; // името на векторната база, вече създадена
+  const vectorStore = await Chroma.fromDocuments(docs, new OpenAIEmbeddings({
+    openAIApiKey: process.env.OPENAI_API_KEY
+  }));
 
-export async function queryGnm(question) {
-  const vectorStore = await Chroma.fromExistingCollection(
-    new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY }),
-    { collectionName, client }
+  const chain = RetrievalQAChain.fromLLM(
+    new OpenAI({ openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0 }),
+    vectorStore.asRetriever()
   );
-
-  const model = new OpenAI({
-    openAIApiKey: process.env.OPENAI_API_KEY,
-    temperature: 0,
-  });
-
-  const chain = RetrievalQAChain.fromLLM(model, vectorStore.asRetriever());
 
   const response = await chain.call({ query: question });
   return response.text;
-}
+};
+
+module.exports = { queryGnm };
