@@ -1,9 +1,10 @@
+// /gnm/gnm-query.js
+
 const path = require("path");
 const { PDFLoader } = require("langchain/document_loaders/fs/pdf");
-const { OpenAIEmbeddings } = require("langchain/embeddings/openai");
-const { Chroma } = require("langchain/vectorstores/chroma");
+const { OpenAIEmbeddings, OpenAI } = require("@langchain/openai");
+const { Chroma } = require("@langchain/community/vectorstores/chroma");
 const { RetrievalQAChain } = require("langchain/chains");
-const { OpenAI } = require("langchain/llms/openai");
 
 const queryGnm = async (question) => {
   const loader = new PDFLoader(path.join(__dirname, "System prompt German new medicine.pdf"));
