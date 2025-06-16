@@ -128,7 +128,7 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, max_tokens, vector_namespace } = req.body;
   const ip = req.ip;
   const now = Date.now();
-  const model = 'gpt-4o';
+  const model = 'gpt-3.5-turbo';
 
   if (!messages) return res.status(400).json({ error: 'Missing messages' });
   if (blockedIPs[ip] && blockedIPs[ip] > now) return res.status(403).json({ error: '⛔ Your IP is temporarily blocked.' });
