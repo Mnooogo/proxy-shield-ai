@@ -247,6 +247,15 @@ app.post('/gnm-query', checkGPTSecret, async (req, res) => {
   }
 });
 
+function searchGnmAnswer(userQuestion) {
+  userQuestion = userQuestion.toLowerCase();
+  for (const entry of gnmData) {
+    if (userQuestion.includes(entry.question.toLowerCase())) {
+      return entry.answer;
+    }
+  }
+  return null;
+}
 
 
 app.listen(PORT, () => {
