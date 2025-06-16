@@ -4,7 +4,7 @@
   "description": "proxyshieldai",
   "author": "Stefan Spasov <info@vetom.bg>",
   "main": "main.js",
-  "scripts": {
+"scripts": {
   "start": "electron .",
   "load-gnm": "node gnm/gnm-loader.js",
   "build": "electron-builder build",
