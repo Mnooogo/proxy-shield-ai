@@ -1,12 +1,11 @@
 {
   "name": "proxy-shield-ai",
   "version": "1.0.0",
-  "type": "module",
   "description": "proxyshieldai",
   "author": "Stefan Spasov <info@vetom.bg>",
-  "main": "main.js",
-  "scripts": {
-      "start": "node server.cjs",
+ "main": "server.js",
+"scripts": {
+  "start": "node server.js",
   "load-gnm": "node gnm/gnm-loader.js",
     "build": "electron-builder build",
     "dist": "electron-builder",
