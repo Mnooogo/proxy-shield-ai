@@ -35,7 +35,6 @@ app.use(session({
 }));
 
 app.use(cors());
-// Raw body for Stripe only
 app.use((req, res, next) => {
   if (req.originalUrl === '/stripe/webhook') {
     bodyParser.raw({ type: 'application/json' })(req, res, next);
@@ -44,8 +43,6 @@ app.use((req, res, next) => {
   }
 });
 
-
-// File paths
 const blockedPath = path.join(__dirname, 'blocked.json');
 const usagePath = path.join(__dirname, 'usage.json');
 const requestCountPath = path.join(__dirname, 'requests.json');
@@ -148,7 +145,6 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   try {
     let reply = "No response";
 
-    // 🧠 Ако идва заявка за GNM, пусни query към GNM vector база
     if (vector_namespace === "gnm") {
       const userMessage = messages.find(m => m.role === "user")?.content || "No question";
       reply = await queryGnm(userMessage);
@@ -156,21 +152,28 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
       const response = await axios.post('https://api.openai.com/v1/chat/completions',
         { model, messages, max_tokens },
         { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
-      reply = response.data.choices[0]?.message?.content?.trim();
+
+      reply = response.data.choices?.[0]?.message?.content?.trim();
+
+      if (!reply) {
+        logActivity(`⚠️ Empty reply from OpenAI. Full response: ${JSON.stringify(response.data)}`);
+        return res.json({ reply: '🤖 I couldn’t find a specific answer. Try asking differently or rephrasing your question.' });
+      }
+
+      const tokenUsed = response.data?.usage?.total_tokens || 0;
+      usageData[ip] = (usageData[ip] || 0) + tokenUsed;
+      saveUsage();
+
+      if (usageData[ip] > 10000) {
+        blockedIPs[ip] = now + 86400000;
+        saveBlocked();
+        logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
+        return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
+      }
+
+      logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
     }
 
-    const tokenUsed = response.data?.usage?.total_tokens || 0;
-    usageData[ip] = (usageData[ip] || 0) + tokenUsed;
-    saveUsage();
-
-    if (usageData[ip] > 10000) {
-      blockedIPs[ip] = now + 86400000;
-      saveBlocked();
-      logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
-      return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
-    }
-
-    logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
     res.json({ reply });
   } catch (err) {
     logActivity(`❌ /chat error for ${ip} | ${err.message}`);
@@ -211,7 +214,6 @@ app.post('/verify-code', async (req, res) => {
   res.status(401).json({ success: false, message: 'Invalid or expired code.' });
 });
 
-// ✅ Stripe Webhook Endpoint
 app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -232,6 +234,7 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, 
 
   res.status(200).send('✅ Webhook received');
 });
+
 const { queryGnm } = require('./gnm/gnm-query');
 
 app.post('/gnm-query', checkGPTSecret, async (req, res) => {
@@ -256,6 +259,10 @@ function searchGnmAnswer(userQuestion) {
   }
   return null;
 }
+
+app.listen(PORT, () => {
+  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
+});
 
 
 app.listen(PORT, () => {
