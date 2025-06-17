@@ -1,4 +1,4 @@
-// ✅ Proxy Shield AI – GPT + Telegram + Stripe Webhook Version
+// ✅ Proxy Shield AI – GPT + Telegram + Stripe Webhook Version (with Local GNM PDF Parser)
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
@@ -12,6 +12,7 @@ const cron = require('node-cron');
 const session = require('express-session');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const bodyParser = require('body-parser');
+const pdfParse = require('pdf-parse');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -121,6 +122,19 @@ app.get('/token-stats', authenticateJWT, (req, res) => {
   res.json(usageData);
 });
 
+let gnmChunks = [];
+async function queryGnm(query) {
+  if (gnmChunks.length === 0) {
+    const dataBuffer = fs.readFileSync(path.join(__dirname, 'gnm', 'gnm.pdf'));
+    const pdfData = await pdfParse(dataBuffer);
+    gnmChunks = pdfData.text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 100);
+    logActivity(`✅ Loaded ${gnmChunks.length} GNM chunks`);
+  }
+  const q = query.toLowerCase();
+  const matches = gnmChunks.filter(p => p.toLowerCase().includes(q));
+  return matches.slice(0, 3).join('\n\n') || `❌ No info found for "${query}".`;
+}
+
 app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, max_tokens, vector_namespace } = req.body;
   const ip = req.ip;
@@ -188,82 +202,6 @@ cron.schedule('0 0 * * *', () => {
   saveRequestCount();
   logActivity('🔁 Daily reset of usage and request count.');
 });
-
-app.post('/send-code', async (req, res) => {
-  const { phoneNumber } = req.body;
-  if (!phoneNumber) return res.status(400).json({ success: false, message: 'Phone number required.' });
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  activeCodes[phoneNumber] = code;
-  await sendTelegramAlert(`📬 Access code for ${phoneNumber}: ${code}`);
-  logActivity(`📬 Code ${code} generated for ${phoneNumber}`);
-  res.json({ success: true });
-});
-
-app.post('/verify-code', async (req, res) => {
-  const { phoneNumber, code } = req.body;
-  if (!phoneNumber || !code) return res.status(400).json({ success: false, message: 'Missing phone or code.' });
-  if (activeCodes[phoneNumber] === code) {
-    delete activeCodes[phoneNumber];
-    req.session.verified = true;
-    await sendTelegramAlert(`✅ Code verified for ${phoneNumber}`);
-    logActivity(`✅ Verified code for ${phoneNumber}`);
-    return res.json({ success: true });
-  }
-  await sendTelegramAlert(`❌ Invalid code "${code}" for ${phoneNumber}`);
-  logActivity(`❌ Invalid code "${code}" for ${phoneNumber}`);
-  res.status(401).json({ success: false, message: 'Invalid or expired code.' });
-});
-
-app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('⚠️ Webhook signature verification failed.', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const msg = `💰 Stripe Payment Successful!\n✅ Email: ${session.customer_email || 'unknown'}\n🧾 Amount: ${session.amount_total / 100} ${session.currency.toUpperCase()}`;
-    logActivity(`💰 Stripe payment: ${msg}`);
-    sendTelegramAlert(msg);
-  }
-
-  res.status(200).send('✅ Webhook received');
-});
-
-const { queryGnm } = require('./gnm/gnm-query');
-
-app.post('/gnm-query', checkGPTSecret, async (req, res) => {
-  const { query } = req.body;
-  if (!query) return res.status(400).json({ error: 'Missing query input.' });
-
-  try {
-    const result = await queryGnm(query);
-    res.json({ result });
-  } catch (err) {
-    logActivity(`❌ GNM query failed: ${err.message}`);
-    res.status(500).json({ error: 'GNM query failed', details: err.message });
-  }
-});
-
-function searchGnmAnswer(userQuestion) {
-  userQuestion = userQuestion.toLowerCase();
-  for (const entry of gnmData) {
-    if (userQuestion.includes(entry.question.toLowerCase())) {
-      return entry.answer;
-    }
-  }
-  return null;
-}
-
-app.listen(PORT, () => {
-  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
-});
-
 
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
