@@ -13,6 +13,7 @@ const session = require('express-session');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const bodyParser = require('body-parser');
 const pdfParse = require('pdf-parse');
+const { queryGnm } = require('./gnm/gnm-query.js'); // или директно ./gnm-query.js
 
 const app = express();
 const PORT = process.env.PORT || 10000;
