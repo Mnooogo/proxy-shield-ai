@@ -6,8 +6,8 @@
   "author": "Stefan Spasov <info@vetom.bg>",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "load-gnm": "node gnm/gnm-loader.js",
+      "start": "node server.cjs",
+  "load-gnm": "node gnm/gnm-loader.js",
     "build": "electron-builder build",
     "dist": "electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
