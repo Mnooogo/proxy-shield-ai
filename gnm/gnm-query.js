@@ -1,30 +1,29 @@
-// ✅ gnm/gnm-loader.js – само за първоначално генериране на db
-const path = require("path");
-const fs = require("fs");
-const { OpenAIEmbeddings } = require("@langchain/openai");
-const { Chroma } = require("@langchain/community/vectorstores/chroma");
-const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
-const { Document } = require("langchain/document");
+const fs = require('fs');
+const pdfParse = require('pdf-parse');
 
-// ✅ Зареждаме JSON fallback (може и от PDF)
-const gnmJson = JSON.parse(fs.readFileSync(path.join(__dirname, "gnm-knowledge.json"), "utf8"));
+let gnmChunks = [];
 
-// 🔍 Превръщаме в документи
-const docs = gnmJson.map(entry => new Document({ pageContent: `${entry.question}\n${entry.answer}` }));
+async function loadGNM() {
+  const dataBuffer = fs.readFileSync('./gnm/gnm.pdf');
+  const pdfData = await pdfParse(dataBuffer);
 
-// ✅ Разбиване на фрагменти (ако искаш по-фин контрол)
-const splitter = new RecursiveCharacterTextSplitter({ chunkSize: 300, chunkOverlap: 30 });
+  gnmChunks = pdfData.text
+    .split(/\n\s*\n/) // Разделяне по празни редове (параграфи)
+    .map(p => p.trim())
+    .filter(p => p.length > 100); // махаме кратките боклуци
 
-async function run() {
-  const splitDocs = await splitter.splitDocuments(docs);
-  const embeddings = new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY });
-
-  await Chroma.fromDocuments(splitDocs, embeddings, {
-    collectionName: "gnm-docs",
-    indexPath: path.join(__dirname, "db")  // 👉 записва тук
-  });
-
-  console.log("✅ GNM index created at /gnm/db");
+  console.log(`✅ Loaded ${gnmChunks.length} chunks from GNM PDF`);
 }
 
-run();
+async function queryGnm(query) {
+  if (gnmChunks.length === 0) await loadGNM();
+
+  const q = query.toLowerCase();
+  const matches = gnmChunks.filter(p => p.toLowerCase().includes(q));
+
+  if (matches.length === 0) return `❌ No relevant information found for: "${query}"`;
+  
+  return matches.slice(0, 3).join('\n\n'); // първите 3 съвпадения
+}
+
+module.exports = { queryGnm };
