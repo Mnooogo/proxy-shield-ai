@@ -147,39 +147,38 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   }
 
   try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model, messages, max_tokens },
-      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
+  const response = await axios.post(
+    'https://api.openai.com/v1/chat/completions',
+    { model, messages, max_tokens },
+    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+  );
 
- const reply = response.data.choices[0]?.message?.content?.trim();
+  const reply = response.data.choices?.[0]?.message?.content?.trim();
 
-if (!reply) {
-  logActivity(`⚠️ GPT replied empty for IP ${ip} | Response dump: ${JSON.stringify(response.data)}`);
-  return res.json({
-    reply: '🌱 I wasn’t able to find the right words just now. Can you ask me in another way?'
-  });
+  if (!reply) {
+    logActivity(`⚠️ Empty reply from OpenAI. Full response: ${JSON.stringify(response.data)}`);
+    return res.json({ reply: '🤖 I couldn’t find a specific answer. Try asking differently or rephrasing your question.' });
+  }
+
+  const tokenUsed = response.data?.usage?.total_tokens || 0;
+  usageData[ip] = (usageData[ip] || 0) + tokenUsed;
+  saveUsage();
+
+  if (usageData[ip] > 10000) {
+    blockedIPs[ip] = now + 86400000;
+    saveBlocked();
+    logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
+    return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
+  }
+
+  logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
+  res.json({ reply });
+
+} catch (err) {
+  logActivity(`❌ /chat error for ${ip} | ${err.message}`);
+  res.status(500).json({ error: 'Chat error', details: err.message });
 }
 
-const tokenUsed = response.data?.usage?.total_tokens || 0;
-
-usageData[ip] = (usageData[ip] || 0) + tokenUsed;
-saveUsage();
-
-
-    if (usageData[ip] > 10000) {
-      blockedIPs[ip] = now + 86400000;
-      saveBlocked();
-      logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
-      return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
-    }
-
-    logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
-    res.json({ reply });
-  } catch (err) {
-    logActivity(`❌ /chat error for ${ip} | ${err.message}`);
-    res.status(500).json({ error: 'Chat error', details: err.message });
-  }
-});
 
 cron.schedule('0 0 * * *', () => {
   usageData = {};
@@ -235,7 +234,8 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, 
 
   res.status(200).send('✅ Webhook received');
 });
-const { queryGnm } = require('./gnm/gnm-query');
+const { queryGnm } = require("./gnm/gnm-query.js"); // ✅
+
 
 app.post('/gnm-query', checkGPTSecret, async (req, res) => {
   const { query } = req.body;

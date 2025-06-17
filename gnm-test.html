@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GNM Query Test</title>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #fff; padding: 2em; }
+    #response { margin-top: 20px; white-space: pre-wrap; background: #222; padding: 1em; border-radius: 8px; }
+    button { padding: 10px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h2>🧠 GNM AI Query Test</h2>
+  <input id="question" type="text" value="What is the cause of asthma?" style="width:80%;padding:10px;" />
+  <button onclick="send()">Send to AI</button>
+  <div id="response">Waiting for input...</div>
+
+  <script>
+    async function send() {
+      const question = document.getElementById("question").value;
+      const resBox = document.getElementById("response");
+      resBox.textContent = "⏳ Sending...";
+
+      try {
+        const res = await fetch("http://localhost:10000/gnm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        resBox.textContent = "✅ AI Response:\n\n" + data.answer;
+      } catch (err) {
+        resBox.textContent = "❌ Error: " + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
