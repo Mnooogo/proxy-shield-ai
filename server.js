@@ -14,7 +14,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const bodyParser = require('body-parser');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 10002;
 
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
@@ -35,7 +35,6 @@ app.use(session({
 }));
 
 app.use(cors());
-// Raw body for Stripe only
 app.use((req, res, next) => {
   if (req.originalUrl === '/stripe/webhook') {
     bodyParser.raw({ type: 'application/json' })(req, res, next);
@@ -44,8 +43,6 @@ app.use((req, res, next) => {
   }
 });
 
-
-// File paths
 const blockedPath = path.join(__dirname, 'blocked.json');
 const usagePath = path.join(__dirname, 'usage.json');
 const requestCountPath = path.join(__dirname, 'requests.json');
@@ -147,38 +144,38 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   }
 
   try {
-  const response = await axios.post(
-    'https://api.openai.com/v1/chat/completions',
-    { model, messages, max_tokens },
-    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
-  );
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      { model, messages, max_tokens },
+      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+    );
 
-  const reply = response.data.choices?.[0]?.message?.content?.trim();
+    const reply = response.data.choices?.[0]?.message?.content?.trim();
 
-  if (!reply) {
-    logActivity(`⚠️ Empty reply from OpenAI. Full response: ${JSON.stringify(response.data)}`);
-    return res.json({ reply: '🤖 I couldn’t find a specific answer. Try asking differently or rephrasing your question.' });
+    if (!reply) {
+      logActivity(`⚠️ Empty reply from OpenAI. Full response: ${JSON.stringify(response.data)}`);
+      return res.json({ reply: '🤖 I couldn’t find a specific answer. Try asking differently or rephrasing your question.' });
+    }
+
+    const tokenUsed = response.data?.usage?.total_tokens || 0;
+    usageData[ip] = (usageData[ip] || 0) + tokenUsed;
+    saveUsage();
+
+    if (usageData[ip] > 10000) {
+      blockedIPs[ip] = now + 86400000;
+      saveBlocked();
+      logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
+      return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
+    }
+
+    logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
+    res.json({ reply });
+
+  } catch (err) {
+    logActivity(`❌ /chat error for ${ip} | ${err.message}`);
+    res.status(500).json({ error: 'Chat error', details: err.message });
   }
-
-  const tokenUsed = response.data?.usage?.total_tokens || 0;
-  usageData[ip] = (usageData[ip] || 0) + tokenUsed;
-  saveUsage();
-
-  if (usageData[ip] > 10000) {
-    blockedIPs[ip] = now + 86400000;
-    saveBlocked();
-    logActivity(`⛔ IP ${ip} blocked (token abuse in /chat)`);
-    return res.status(429).json({ error: 'Blocked for 24h due to token overuse.' });
-  }
-
-  logActivity(`🗨️ /chat by ${ip} | Tokens: ${tokenUsed} | Total: ${usageData[ip]}`);
-  res.json({ reply });
-
-} catch (err) {
-  logActivity(`❌ /chat error for ${ip} | ${err.message}`);
-  res.status(500).json({ error: 'Chat error', details: err.message });
-}
-
+});
 
 cron.schedule('0 0 * * *', () => {
   usageData = {};
@@ -213,7 +210,6 @@ app.post('/verify-code', async (req, res) => {
   res.status(401).json({ success: false, message: 'Invalid or expired code.' });
 });
 
-// ✅ Stripe Webhook Endpoint
 app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -234,9 +230,8 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, 
 
   res.status(200).send('✅ Webhook received');
 });
-const { queryGnm } = require("./gnm/gnm-query.js"); // ✅
 
-
+const { queryGnm } = require("./gnm/gnm-query.js");
 app.post('/gnm-query', checkGPTSecret, async (req, res) => {
   const { query } = req.body;
   if (!query) return res.status(400).json({ error: 'Missing query input.' });
@@ -249,8 +244,6 @@ app.post('/gnm-query', checkGPTSecret, async (req, res) => {
     res.status(500).json({ error: 'GNM query failed', details: err.message });
   }
 });
-
-
 
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);

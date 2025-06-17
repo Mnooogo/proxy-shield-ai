@@ -1,27 +1,27 @@
-// ✅ /gnm/gnm-query.js (final version with local ChromaDB)
-const path = require("path");
-const { Chroma } = require("@langchain/community/vectorstores/chroma");
-const { OpenAIEmbeddings } = require("@langchain/openai");
-const { RetrievalQAChain } = require("langchain/chains");
-const { OpenAI } = require("@langchain/openai");
+const fs = require('fs');
+const pdfParse = require('pdf-parse');
+const path = require('path');
 
-const queryGnm = async (question) => {
-  const vectorStore = await Chroma.fromExistingIndex(
-    new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY }),
-    { 
-      collectionName: "gnm-docs",
-      indexPath: path.join(__dirname, "db")
-    }
-  );
+const gnmPdfPath = path.join(__dirname, 'gnm-info.pdf');
 
-  const chain = RetrievalQAChain.fromLLM(
-    new OpenAI({ openAIApiKey: process.env.OPENAI_API_KEY, temperature: 0.2 }),
-    vectorStore.asRetriever()
-  );
+async function queryGnm(query) {
+  if (!fs.existsSync(gnmPdfPath)) {
+    throw new Error('GNM PDF not found.');
+  }
 
-  const response = await chain.call({ query: question });
-  return response.text;
-};
+  const dataBuffer = fs.readFileSync(gnmPdfPath);
+  const data = await pdfParse(dataBuffer);
+
+  const text = data.text.toLowerCase();
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  const results = lines.filter(line => line.includes(query.toLowerCase()));
+
+  if (results.length === 0) {
+    return '❌ No relevant information found in GNM PDF.';
+  }
+
+  return results.slice(0, 10).join('\n');
+}
 
 module.exports = { queryGnm };
-

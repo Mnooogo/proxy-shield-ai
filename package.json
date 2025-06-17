@@ -1,12 +1,12 @@
 {
   "name": "proxy-shield-ai",
   "version": "1.0.0",
-  "type": "module",
-  "description": "proxyshieldai",
+  "type": "commonjs",
+  "description": "Proxy Shield AI – GPT + Telegram + Stripe + Local PDF",
   "author": "Stefan Spasov <info@vetom.bg>",
-  "main": "main.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.cjs",
+    "start": "node server.js",
     "load-gnm": "node gnm/gnm-loader.js",
     "build": "electron-builder build",
     "dist": "electron-builder",
