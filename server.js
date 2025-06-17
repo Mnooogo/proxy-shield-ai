@@ -123,17 +123,20 @@ app.get('/token-stats', authenticateJWT, (req, res) => {
 });
 
 let gnmChunks = [];
+
 async function queryGnm(query) {
   if (gnmChunks.length === 0) {
-    const dataBuffer = fs.readFileSync(path.join(__dirname, 'gnm', 'gnm.pdf'));
+    const dataBuffer = fs.readFileSync(path.join(__dirname, 'gnm', 'db', 'System prompt German new medicine.pdf'));
     const pdfData = await pdfParse(dataBuffer);
     gnmChunks = pdfData.text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 100);
     logActivity(`✅ Loaded ${gnmChunks.length} GNM chunks`);
   }
+
   const q = query.toLowerCase();
   const matches = gnmChunks.filter(p => p.toLowerCase().includes(q));
   return matches.slice(0, 3).join('\n\n') || `❌ No info found for "${query}".`;
 }
+
 
 app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, max_tokens, vector_namespace } = req.body;
