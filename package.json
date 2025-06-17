@@ -33,7 +33,7 @@
     "express-rate-limit": "^7.5.0",
     "express-session": "^1.17.3",
     "jsonwebtoken": "^9.0.2",
-    "langchain": "^0.1.26",
+    "langchain": "^0.2.19",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.6.11",
     "openai": "^4.10.0",
