@@ -140,7 +140,7 @@ app.get('/token-stats', authenticateJWT, (req, res) => {
   res.json(usageData);
 });
 
-// ✅ Stripe Webhook Update with Metadata
+// ✅ Stripe Webhook Update with line item parsing for accessType
 app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -155,15 +155,24 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const paymentsPath = path.join(__dirname, 'payments.json');
-    const accessType = session.metadata?.accessType || 'immigrant-login';
 
-    let payments = fs.existsSync(paymentsPath) ? JSON.parse(fs.readFileSync(paymentsPath)) : {};
-    payments[session.id] = { accessType };
-    fs.writeFileSync(paymentsPath, JSON.stringify(payments, null, 2));
+    stripe.checkout.sessions.listLineItems(session.id, {}, async (err, lineItems) => {
+      if (err) {
+        console.error('❌ Error retrieving line items:', err);
+        return;
+      }
 
-    const msg = `💰 Stripe Payment Successful!\n✅ Email: ${session.customer_email || 'unknown'}\n🧾 Amount: ${session.amount_total / 100} ${session.currency.toUpperCase()}\n🔁 Access: ${accessType}`;
-    logActivity(`💰 Stripe payment: ${msg}`);
-    sendTelegramAlert(msg);
+      const productName = lineItems.data[0]?.description || 'Immigrant Login';
+      const accessType = productName.toLowerCase().includes('helper') ? 'immigrant-helper' : 'immigrant-login';
+
+      let payments = fs.existsSync(paymentsPath) ? JSON.parse(fs.readFileSync(paymentsPath)) : {};
+      payments[session.id] = { accessType };
+      fs.writeFileSync(paymentsPath, JSON.stringify(payments, null, 2));
+
+      const msg = `💰 Stripe Payment Successful!\n✅ Email: ${session.customer_email || 'unknown'}\n🧾 Amount: ${session.amount_total / 100} ${session.currency.toUpperCase()}\n🔁 Access: ${accessType}`;
+      logActivity(`💰 Stripe payment: ${msg}`);
+      sendTelegramAlert(msg);
+    });
   }
 
   res.status(200).send('✅ Webhook received');
