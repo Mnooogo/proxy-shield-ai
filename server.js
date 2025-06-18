@@ -210,7 +210,7 @@ app.post('/verify-code', async (req, res) => {
   res.status(401).json({ success: false, message: 'Invalid or expired code.' });
 });
 
-app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, res) => {
+app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
@@ -223,9 +223,36 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), (req, 
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-    const msg = `💰 Stripe Payment Successful!\n✅ Email: ${session.customer_email || 'unknown'}\n🧾 Amount: ${session.amount_total / 100} ${session.currency.toUpperCase()}`;
-    logActivity(`💰 Stripe payment: ${msg}`);
-    sendTelegramAlert(msg);
+
+    try {
+      const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+        expand: ['line_items.data.price.product'],
+      });
+
+      const lineItems = fullSession.line_items.data;
+      const productName = lineItems?.[0]?.price?.product?.name || 'unknown';
+      const email = session.customer_email || 'unknown';
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+
+      const paymentsPath = path.join(__dirname, 'payments.json');
+      let paymentData = fs.existsSync(paymentsPath) ? JSON.parse(fs.readFileSync(paymentsPath)) : {};
+
+      const accessType = productName.toLowerCase().includes('helper') ? 'register-helper' : 'immigrant-login';
+
+      paymentData[session.id] = {
+        email,
+        accessType,
+        expiresAt
+      };
+      fs.writeFileSync(paymentsPath, JSON.stringify(paymentData, null, 2));
+
+      const msg = `💰 Stripe Payment Successful!\n📧 ${email}\n🧾 Product: ${productName}\n🕒 Expires: ${new Date(expiresAt).toLocaleString()}\n➡️ Access: ${accessType}`;
+      logActivity(`💰 Stripe payment | ${msg}`);
+      await sendTelegramAlert(msg);
+
+    } catch (err) {
+      console.error('❌ Failed to expand session with product info:', err.message);
+    }
   }
 
   res.status(200).send('✅ Webhook received');
