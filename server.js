@@ -43,23 +43,26 @@ app.use((req, res, next) => {
   }
 });
 
-const blockedPath = path.join(__dirname, 'blocked.json');
-const usagePath = path.join(__dirname, 'usage.json');
-const requestCountPath = path.join(__dirname, 'requests.json');
-const logPath = path.join(__dirname, 'proxy_log.txt');
+// 🔁 Confirmation page that redirects based on payment record
+app.get('/payment-confirmation', (req, res) => {
+  const sessionId = req.query.session_id;
+  const paymentsPath = path.join(__dirname, 'payments.json');
 
-let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath)) : {};
-let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath)) : {};
-let requestsPerDay = fs.existsSync(requestCountPath) ? JSON.parse(fs.readFileSync(requestCountPath)) : {};
+  if (!sessionId || !fs.existsSync(paymentsPath)) {
+    return res.redirect('/error.html');
+  }
 
-function saveBlocked() { fs.writeFileSync(blockedPath, JSON.stringify(blockedIPs, null, 2)); }
-function saveUsage() { fs.writeFileSync(usagePath, JSON.stringify(usageData, null, 2)); }
-function saveRequestCount() { fs.writeFileSync(requestCountPath, JSON.stringify(requestsPerDay, null, 2)); }
+  try {
+    const payments = JSON.parse(fs.readFileSync(paymentsPath));
+    const record = payments[sessionId];
+    if (!record) return res.redirect('/error.html');
 
-function logActivity(entry) {
-  const logEntry = `[${new Date().toISOString()}] ${entry}\n`;
-  fs.appendFileSync(logPath, logEntry);
-}
+    const redirectPath = `/` + record.accessType + `/index.php?session_id=` + sessionId;
+    return res.redirect(redirectPath);
+  } catch (err) {
+    return res.redirect('/error.html');
+  }
+});
 
 async function sendTelegramAlert(msg) {
   if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
