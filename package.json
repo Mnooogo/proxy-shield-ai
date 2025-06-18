@@ -2,7 +2,7 @@
   "name": "proxy-shield-ai",
   "version": "1.0.0",
   "type": "commonjs",
-  "description": "Proxy Shield AI – GPT + Telegram + Stripe + Local PDF",
+  "description": "Proxy Shield AI – GPT + Telegram + Stripe ",
   "author": "Stefan Spasov <info@vetom.bg>",
   "main": "server.js",
   "scripts": {
@@ -33,8 +33,7 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^2.6.11",
     "openai": "^4.10.0",
-    "pdf-parse": "^1.1.1",
-    "stripe": "^14.0.0"
+      "stripe": "^14.0.0"
   },
   "build": {
     "appId": "proxy-shield-ai",
