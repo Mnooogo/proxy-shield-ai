@@ -57,7 +57,7 @@ app.get('/payment-confirmation', (req, res) => {
     const record = payments[sessionId];
     if (!record) return res.redirect('/error.html');
 
-    const redirectPath = `/` + record.accessType + `/index.php?session_id=` + sessionId;
+    const redirectPath = `/${record.accessType}/index.php?session_id=${sessionId}`;
     return res.redirect(redirectPath);
   } catch (err) {
     return res.redirect('/error.html');
@@ -138,4 +138,33 @@ app.get('/logs', authenticateJWT, (req, res) => {
 
 app.get('/token-stats', authenticateJWT, (req, res) => {
   res.json(usageData);
+});
+
+// ✅ Stripe Webhook Update with Metadata
+app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('⚠️ Webhook signature verification failed.', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const paymentsPath = path.join(__dirname, 'payments.json');
+    const accessType = session.metadata?.accessType || 'immigrant-login';
+
+    let payments = fs.existsSync(paymentsPath) ? JSON.parse(fs.readFileSync(paymentsPath)) : {};
+    payments[session.id] = { accessType };
+    fs.writeFileSync(paymentsPath, JSON.stringify(payments, null, 2));
+
+    const msg = `💰 Stripe Payment Successful!\n✅ Email: ${session.customer_email || 'unknown'}\n🧾 Amount: ${session.amount_total / 100} ${session.currency.toUpperCase()}\n🔁 Access: ${accessType}`;
+    logActivity(`💰 Stripe payment: ${msg}`);
+    sendTelegramAlert(msg);
+  }
+
+  res.status(200).send('✅ Webhook received');
 });
