@@ -22,8 +22,9 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GPT_SECRET = process.env.GPT_SECRET;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-const configuration = new Configuration({ apiKey: OPENAI_KEY });
-const openai = new OpenAIApi(configuration);
+const OpenAI = require('openai');
+const openai = new OpenAI({ apiKey: OPENAI_KEY });
+
 
 // 🧠 Memory System
 const memoryPath = path.join(__dirname, 'memory.json');
