@@ -37,6 +37,21 @@ function saveMemory(userId, text) {
   data.users[userId] = text;
   fs.writeFileSync(memoryPath, JSON.stringify(data, null, 2));
 }
+// ✅ Save memory from client to server
+app.post('/save-memory', (req, res) => {
+  const { userId, memory } = req.body;
+  if (!userId || !memory) return res.status(400).json({ error: 'Missing userId or memory' });
+  saveMemory(userId, memory);
+  res.json({ status: '✅ Memory saved' });
+});
+
+// ✅ Load memory from server
+app.post('/load-memory', (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+  const memory = loadMemory(userId);
+  res.json({ memory });
+});
 
 // ✅ Middleware
 app.use(session({
