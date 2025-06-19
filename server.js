@@ -37,6 +37,7 @@ function saveMemory(userId, text) {
   data.users[userId] = text;
   fs.writeFileSync(memoryPath, JSON.stringify(data, null, 2));
 }
+
 // ✅ Save memory from client to server
 app.post('/save-memory', (req, res) => {
   const { userId, memory } = req.body;
