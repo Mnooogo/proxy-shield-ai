@@ -1,6 +1,7 @@
 // ✅ Proxy Shield AI – GPT + Telegram + Stripe Webhook + Hybrid Memory
 require('dotenv').config();
 const express = require('express');
+app.use(express.json({ limit: '15mb' })); // ✅ РЕД 2
 const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
@@ -67,9 +68,10 @@ app.use((req, res, next) => {
   if (req.originalUrl === '/stripe/webhook') {
     bodyParser.raw({ type: 'application/json' })(req, res, next);
   } else {
-    express.json({ limit: '15mb' })(req, res, next);
+    next(); // ✅ JSON вече е активиран глобално горе
   }
 });
+
 
 // ✅ Logging & Usage
 const logPath = path.join(__dirname, 'proxy_log.txt');
