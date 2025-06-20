@@ -13,24 +13,18 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const bodyParser = require('body-parser');
 const { Configuration, OpenAIApi } = require('openai');
 
-const app = express(); // ✅ първо създаваме app
-app.use(express.json({ limit: '15mb' })); // ✅ чак след това го ползваме
-
+const app = express();
+app.use(express.json({ limit: '15mb' }));
 const PORT = process.env.PORT || 10000;
-
-
 
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GPT_SECRET = process.env.GPT_SECRET;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const openai = new OpenAIApi(new Configuration({ apiKey: OPENAI_KEY }));
 
-const OpenAI = require('openai');
-const openai = new OpenAI({ apiKey: OPENAI_KEY });
-
-
-// 🧠 Memory System
+// ✅ Memory system
 const memoryPath = path.join(__dirname, 'memory.json');
 function loadMemory(userId) {
   if (!fs.existsSync(memoryPath)) return '';
@@ -43,7 +37,7 @@ function saveMemory(userId, text) {
   fs.writeFileSync(memoryPath, JSON.stringify(data, null, 2));
 }
 
-// ✅ Save memory from client to server
+// ✅ Save memory from client
 app.post('/save-memory', (req, res) => {
   const { userId, memory } = req.body;
   if (!userId || !memory) return res.status(400).json({ error: 'Missing userId or memory' });
@@ -71,12 +65,11 @@ app.use((req, res, next) => {
   if (req.originalUrl === '/stripe/webhook') {
     bodyParser.raw({ type: 'application/json' })(req, res, next);
   } else {
-    next(); // ✅ JSON вече е активиран глобално горе
+    next();
   }
 });
 
-
-// ✅ Logging & Usage
+// ✅ Logging & Telegram
 const logPath = path.join(__dirname, 'proxy_log.txt');
 function logActivity(entry) {
   const logEntry = `[${new Date().toISOString()}] ${entry}\n`;
@@ -94,7 +87,7 @@ async function sendTelegramAlert(msg) {
   }
 }
 
-// ✅ Auth
+// ✅ Admin credentials
 const users = [];
 const setupUser = () => {
   const username = process.env.ADMIN_USER || 'adminSTEF';
@@ -104,6 +97,7 @@ const setupUser = () => {
 };
 setupUser();
 
+// ✅ Auth middleware
 function authenticateJWT(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(403).json({ error: 'Invalid token' });
@@ -116,17 +110,15 @@ function authenticateJWT(req, res, next) {
   }
 }
 
-// ✅ /chat endpoint – FIXED
+// ✅ Main chat endpoint
 app.post('/chat', async (req, res) => {
   const { userId, message, localMemory } = req.body;
-
   if (!userId || !message) {
     return res.status(400).json({ error: 'Missing userId or message.' });
   }
 
   const serverMemory = loadMemory(userId);
   const combinedMemory = `${localMemory || ''}\n\n${serverMemory}`;
-
   const systemPrompt = `
 You are Stefan's AI assistant. Your memory includes:
 ${combinedMemory}
@@ -153,7 +145,7 @@ Use this knowledge to help personally, deeply, and in context.
   }
 });
 
-// ✅ Stripe Webhook
+// ✅ Stripe webhook
 app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -191,7 +183,7 @@ app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async 
   res.status(200).send('✅ Webhook received');
 });
 
-// ✅ Redirect confirmation
+// ✅ Payment confirmation redirect
 app.get('/payment-confirmation', (req, res) => {
   const sessionId = req.query.session_id;
   const paymentsPath = path.join(__dirname, 'payments.json');
@@ -212,7 +204,7 @@ app.get('/payment-confirmation', (req, res) => {
   }
 });
 
-// ✅ Start server
+// ✅ Start the server
 app.listen(PORT, () => {
   console.log(`🚀 Proxy Shield AI running on port ${PORT}`);
 });
