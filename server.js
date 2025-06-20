@@ -15,7 +15,10 @@ const bodyParser = require('body-parser');
 const { Configuration, OpenAIApi } = require('openai');
 
 const app = express();
+app.use(express.json({ limit: '15mb' })); // ✅ Готово – вече няма да хвърля ReferenceError
+
 const PORT = process.env.PORT || 10000;
+
 
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
