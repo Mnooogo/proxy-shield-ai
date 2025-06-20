@@ -1,7 +1,6 @@
 // ✅ Proxy Shield AI – GPT + Telegram + Stripe Webhook + Hybrid Memory
 require('dotenv').config();
 const express = require('express');
-app.use(express.json({ limit: '15mb' })); // ✅ РЕД 2
 const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
@@ -14,10 +13,11 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const bodyParser = require('body-parser');
 const { Configuration, OpenAIApi } = require('openai');
 
-const app = express();
-app.use(express.json({ limit: '15mb' })); // ✅ Готово – вече няма да хвърля ReferenceError
+const app = express(); // ✅ първо създаваме app
+app.use(express.json({ limit: '15mb' })); // ✅ чак след това го ползваме
 
 const PORT = process.env.PORT || 10000;
+
 
 
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
