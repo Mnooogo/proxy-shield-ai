@@ -11,7 +11,7 @@ const jwt = require('jsonwebtoken');
 const session = require('express-session');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const bodyParser = require('body-parser');
-const { Configuration, OpenAIApi } = require('openai');
+
 
 const app = express();
 app.use(express.json({ limit: '15mb' }));
@@ -22,7 +22,9 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GPT_SECRET = process.env.GPT_SECRET;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const openai = new OpenAIApi(new Configuration({ apiKey: OPENAI_KEY }));
+const OpenAI = require('openai');
+const openai = new OpenAI({ apiKey: OPENAI_KEY });
+
 
 // ✅ Memory system
 const memoryPath = path.join(__dirname, 'memory.json');
