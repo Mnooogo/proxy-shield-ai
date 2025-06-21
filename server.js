@@ -22,7 +22,7 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const GPT_SECRET = process.env.GPT_SECRET;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const OpenAI = require('openai');
+import OpenAI from 'openai';
 const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
 
