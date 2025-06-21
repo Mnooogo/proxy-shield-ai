@@ -1,13 +1,13 @@
+// ✅ Stable Proxy Shield server.js
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
-const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const cron = require('node-cron');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10);
@@ -16,31 +16,38 @@ if (isNaN(PORT)) {
   process.exit(1);
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
+// ENV CONFIG
+const JWT_SECRET = process.env.JWT_SECRET;
+const GPT_SECRET = process.env.GPT_SECRET;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const GPT_SECRET = process.env.GPT_SECRET;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
+// Middleware
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: '⏱️ Too many requests. Try again soon.'
+}));
 
-// Storage
+// Paths
 const usagePath = path.join(__dirname, 'usage.json');
 const requestPath = path.join(__dirname, 'requests.json');
 const blockedPath = path.join(__dirname, 'blocked.json');
 const logPath = path.join(__dirname, 'proxy_log.txt');
+const memoryDir = path.join(__dirname, 'memory');
 
-let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : {};
-let requestsPerDay = fs.existsSync(requestPath) ? JSON.parse(fs.readFileSync(requestPath, 'utf8')) : {};
-let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath, 'utf8')) : {};
+// Data storage
+let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath)) : {};
+let requestsPerDay = fs.existsSync(requestPath) ? JSON.parse(fs.readFileSync(requestPath)) : {};
+let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath)) : {};
 
-function saveJSON(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-}
-function logActivity(msg) {
-  fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
-}
+const saveJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2));
+const log = msg => fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
+
+// Telegram alert
 async function sendTelegramAlert(msg) {
   if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
   try {
@@ -52,13 +59,6 @@ async function sendTelegramAlert(msg) {
     console.error('❌ Telegram error:', e.message);
   }
 }
-
-// Rate limiting middleware
-app.use(rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
-  message: '⏱️ Too many requests. Try again soon.'
-}));
 
 // Auth
 const users = [];
@@ -84,27 +84,25 @@ function authenticateJWT(req, res, next) {
 
 function checkGPTSecret(req, res, next) {
   if (req.headers['x-secret'] !== GPT_SECRET) {
-    logActivity(`🚫 Unauthorized secret from ${req.ip}`);
+    log(`🚫 Unauthorized secret from ${req.ip}`);
     return res.status(403).json({ error: 'Unauthorized' });
   }
   next();
 }
 
-// Proxy route
+// Routes
+app.get('/', (_, res) => res.json({ status: '🛡️ Proxy Shield Ready' }));
+
 app.post('/proxy', async (req, res) => {
   const ip = req.ip;
   const now = Date.now();
-
-  if (blockedIPs[ip] && blockedIPs[ip] > now) {
-    return res.status(403).json({ error: 'Blocked for abuse.' });
-  }
-
   const { apiKey, messages, model } = req.body;
+
+  if (blockedIPs[ip] && blockedIPs[ip] > now) return res.status(403).json({ error: 'Blocked for abuse.' });
   if (!apiKey || !messages || !model) return res.status(400).json({ error: 'Missing fields.' });
 
   requestsPerDay[ip] = (requestsPerDay[ip] || 0) + 1;
   usageData[ip] = usageData[ip] || 0;
-
   if (requestsPerDay[ip] > 100) {
     blockedIPs[ip] = now + 86400000;
     saveJSON(blockedPath, blockedIPs);
@@ -127,15 +125,14 @@ app.post('/proxy', async (req, res) => {
       return res.status(429).json({ error: 'Token limit exceeded.' });
     }
 
-    logActivity(`✅ ${ip} | Tokens: ${used} | Total: ${usageData[ip]}`);
+    log(`✅ ${ip} | Tokens: ${used} | Total: ${usageData[ip]}`);
     res.json(response.data);
   } catch (err) {
-    logActivity(`❌ Proxy error ${ip}: ${err.message}`);
+    log(`❌ Proxy error ${ip}: ${err.message}`);
     res.status(500).json({ error: 'Proxy failed', details: err.message });
   }
 });
 
-// Protected /chat route
 app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, model } = req.body;
   try {
@@ -148,38 +145,26 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   }
 });
 
-// Logs (JWT protected)
-app.get('/logs', authenticateJWT, (req, res) => {
-  fs.readFile(logPath, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Log error.');
-    res.send(data.split('\n').slice(-100).join('\n'));
-  });
-});
-
-// Memory sync routes
 app.post('/save-memory', (req, res) => {
   const { userId, memory } = req.body;
   if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-  const memoryPath = path.join(__dirname, 'memory', `${userId}.txt`);
-  fs.mkdirSync(path.join(__dirname, 'memory'), { recursive: true });
-  fs.writeFileSync(memoryPath, memory || '', 'utf8');
+  fs.mkdirSync(memoryDir, { recursive: true });
+  fs.writeFileSync(path.join(memoryDir, `${userId}.txt`), memory || '', 'utf8');
 
   res.json({ status: '✅ Memory saved to server.' });
 });
 
-app.post('/save-memory', (req, res) => {
-  const { userId, memory } = req.body;
+app.post('/load-memory', (req, res) => {
+  const { userId } = req.body;
   if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-  const memoryPath = path.join(__dirname, 'memory', `${userId}.txt`);
-  fs.mkdirSync(path.join(__dirname, 'memory'), { recursive: true });
-  fs.writeFileSync(memoryPath, memory || '', 'utf8');
-
-  res.json({ status: '✅ Memory saved to server.' });
+  const memoryPath = path.join(memoryDir, `${userId}.txt`);
+  const memory = fs.existsSync(memoryPath) ? fs.readFileSync(memoryPath, 'utf8') : '';
+  res.json({ memory });
 });
 
-// 🧯 Global error handler — catches any uncaught error
+// Error handler
 app.use((err, req, res, next) => {
   console.error("🔥 Global Error Handler:", err);
   if (!res.headersSent) {
@@ -187,9 +172,6 @@ app.use((err, req, res, next) => {
   }
 });
 
-
-
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT} on 0.0.0.0`);
 });
-
