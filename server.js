@@ -165,6 +165,3 @@ app.listen(PORT, () => {
   console.log(`🛡️ Proxy Shield AI running on port ${PORT}`);
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
-});
