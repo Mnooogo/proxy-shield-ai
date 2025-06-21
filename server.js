@@ -12,10 +12,9 @@ const cron = require('node-cron');
 const app = express();
 const PORT = process.env.PORT;
 if (!PORT) {
-  console.error('❌ Missing PORT env variable! Render requires process.env.PORT to be set.');
+  console.error('❌ Render did not provide PORT!');
   process.exit(1);
 }
-
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -82,7 +81,6 @@ function authenticateJWT(req, res, next) {
   }
 }
 
-// Secret protection middleware
 function checkGPTSecret(req, res, next) {
   if (req.headers['x-secret'] !== GPT_SECRET) {
     logActivity(`🚫 Unauthorized secret from ${req.ip}`);
@@ -157,15 +155,7 @@ app.get('/logs', authenticateJWT, (req, res) => {
   });
 });
 
-// Daily reset
-cron.schedule('0 0 * * *', () => {
-  usageData = {};
-  requestsPerDay = {};
-  saveJSON(usagePath, usageData);
-  saveJSON(requestPath, requestsPerDay);
-  logActivity('🔁 Daily usage reset');
-});
-
+// Memory sync routes
 app.post('/save-memory', (req, res) => {
   const { userId, memory } = req.body;
   if (!userId) return res.status(400).json({ error: 'Missing userId' });
@@ -189,8 +179,16 @@ app.post('/load-memory', (req, res) => {
   res.json({ memory });
 });
 
+// Daily reset
+cron.schedule('0 0 * * *', () => {
+  usageData = {};
+  requestsPerDay = {};
+  saveJSON(usagePath, usageData);
+  saveJSON(requestPath, requestsPerDay);
+  logActivity('🔁 Daily usage reset');
+});
 
 app.listen(PORT, () => {
-  console.log(`🛡️ Proxy Shield AI running on port ${PORT}`);
+  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
 });
 
