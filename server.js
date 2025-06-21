@@ -179,10 +179,14 @@ app.post('/save-memory', (req, res) => {
   res.json({ status: '✅ Memory saved to server.' });
 });
 
+// 🧯 Global error handler — catches any uncaught error
 app.use((err, req, res, next) => {
   console.error("🔥 Global Error Handler:", err);
-  res.status(500).json({ error: err.message || 'Internal Server Error' });
+  if (!res.headersSent) {
+    res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
 });
+
 
 
 app.listen(PORT, () => {
