@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT;
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
