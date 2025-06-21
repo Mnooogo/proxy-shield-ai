@@ -10,11 +10,12 @@ const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
 
 const app = express();
-const PORT = process.env.PORT;
-if (!PORT) {
-  console.error('❌ Render did not provide PORT!');
+const PORT = parseInt(process.env.PORT, 10);
+if (isNaN(PORT)) {
+  console.error('❌ Invalid PORT:', process.env.PORT);
   process.exit(1);
 }
+
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -178,16 +179,9 @@ app.post('/save-memory', (req, res) => {
   res.json({ status: '✅ Memory saved to server.' });
 });
 
-app.post('/load-memory', (req, res) => {
-  const { userId } = req.body;
-  if (!userId) return res.status(400).json({ error: 'Missing userId' });
-
-  const memoryPath = path.join(__dirname, 'memory', `${userId}.txt`);
-  let memory = '';
-  if (fs.existsSync(memoryPath)) {
-    memory = fs.readFileSync(memoryPath, 'utf8');
-  }
-  res.json({ memory });
+app.use((err, req, res, next) => {
+  console.error("🔥 Global Error Handler:", err);
+  res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
 
