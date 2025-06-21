@@ -1,15 +1,25 @@
 {
   "name": "proxy-shield-ai",
   "version": "1.0.0",
-  "type": "module",
-  "description": "Proxy Shield AI – GPT + Telegram + Stripe",
+  "description": "proxyshieldai",
   "author": "Stefan Spasov <info@vetom.bg>",
-  "main": "server.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "electron-builder build",
+    "dist": "electron-builder",
+    "postinstall": "electron-rebuild"
   },
   "keywords": [],
   "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "electron": "^29.3.0",
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.26.0",
+    "globals": "^16.1.0"
+  },
   "dependencies": {
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
@@ -18,11 +28,26 @@
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
-    "express-session": "^1.17.3",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
-    "node-fetch": "^2.6.11",
-    "openai": "^4.0.0",
-    "stripe": "^14.0.0"
+    "node-fetch": "^2.6.11"
+  },
+  "build": {
+    "appId": "proxy-shield-ai",
+    "productName": "Proxy Shield AI",
+    "directories": {
+      "output": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "C:/Users/User/OneDrive/Documents/open ai/proxy shield ai/assets/icons/proxy shield ai.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "menuCategory": true
+    }
   }
 }
