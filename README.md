@@ -17,3 +17,4 @@ A secure proxy + memory backend for AI assistants and apps.
 - IP-based rate limiting and token tracking
 - Telegram alerts for abuse
 - Memory stored per user as flat files
+<!-- force deploy on render -->
