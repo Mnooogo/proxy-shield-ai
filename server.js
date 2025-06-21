@@ -189,7 +189,7 @@ app.use((err, req, res, next) => {
 
 
 
-app.listen(PORT, () => {
-  console.log(`✅ Proxy Shield AI running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Proxy Shield AI running on port ${PORT} on 0.0.0.0`);
 });
 
