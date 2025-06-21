@@ -10,6 +10,8 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+app.set('trust proxy', true); // ✅ Allow X-Forwarded-For
+
 const PORT = parseInt(process.env.PORT, 10);
 if (isNaN(PORT)) {
   console.error('❌ Invalid PORT:', process.env.PORT);
