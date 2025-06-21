@@ -166,6 +166,30 @@ cron.schedule('0 0 * * *', () => {
   logActivity('🔁 Daily usage reset');
 });
 
+app.post('/save-memory', (req, res) => {
+  const { userId, memory } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  const memoryPath = path.join(__dirname, 'memory', `${userId}.txt`);
+  fs.mkdirSync(path.join(__dirname, 'memory'), { recursive: true });
+  fs.writeFileSync(memoryPath, memory || '', 'utf8');
+
+  res.json({ status: '✅ Memory saved to server.' });
+});
+
+app.post('/load-memory', (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  const memoryPath = path.join(__dirname, 'memory', `${userId}.txt`);
+  let memory = '';
+  if (fs.existsSync(memoryPath)) {
+    memory = fs.readFileSync(memoryPath, 'utf8');
+  }
+  res.json({ memory });
+});
+
+
 app.listen(PORT, () => {
   console.log(`🛡️ Proxy Shield AI running on port ${PORT}`);
 });
