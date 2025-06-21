@@ -9,7 +9,6 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "electron-builder build",
     "dist": "electron-builder",
-    "postinstall": "electron-rebuild"
   },
   "keywords": [],
   "license": "ISC",
