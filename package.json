@@ -1,25 +1,15 @@
 {
   "name": "proxy-shield-ai",
   "version": "1.0.0",
-  "type": "commonjs",
+  "type": "module",
   "description": "Proxy Shield AI – GPT + Telegram + Stripe",
   "author": "Stefan Spasov <info@vetom.bg>",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "electron-builder build",
-    "dist": "electron-builder",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
   "keywords": [],
   "license": "ISC",
-  "devDependencies": {
-    "@eslint/js": "^9.26.0",
-    "electron": "^29.3.0",
-    "electron-builder": "^24.13.3",
-    "eslint": "^9.26.0",
-    "globals": "^16.1.0"
-  },
   "dependencies": {
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
@@ -34,23 +24,5 @@
     "node-fetch": "^2.6.11",
     "openai": "^4.0.0",
     "stripe": "^14.0.0"
-  },
-  "build": {
-    "appId": "proxy-shield-ai",
-    "productName": "Proxy Shield AI",
-    "directories": {
-      "output": "build"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "assets/icons/proxy-shield-ai.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "menuCategory": true
-    }
   }
 }
