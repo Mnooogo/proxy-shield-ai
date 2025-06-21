@@ -1,7 +1,6 @@
 {
   "name": "proxy-shield-ai",
   "version": "1.0.0",
-  "type": "commonjs",
   "type": "module"
   "description": "Proxy Shield AI – GPT + Telegram + Stripe ",
   "author": "Stefan Spasov <info@vetom.bg>",
