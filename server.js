@@ -1,212 +1,76 @@
-// ✅ Proxy Shield AI – GPT + Telegram + Stripe Webhook + Hybrid Memory
-require('dotenv').config();
-const express = require('express');
-const axios = require('axios');
-const rateLimit = require('express-rate-limit');
-const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const session = require('express-session');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const bodyParser = require('body-parser');
+// ✅ Proxy Shield AI – GPT + Telegram + Stripe Webhook + Hybrid Memory (CommonJS version) require('dotenv').config(); const express = require('express'); const axios = require('axios'); const rateLimit = require('express-rate-limit'); const cors = require('cors'); const fs = require('fs'); const path = require('path'); const bcrypt = require('bcrypt'); const jwt = require('jsonwebtoken'); const session = require('express-session'); const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY); const bodyParser = require('body-parser'); const { OpenAI } = require('openai');
 
+const app = express(); app.use(express.json({ limit: '15mb' })); const PORT = process.env.PORT || 10000;
 
-const app = express();
-app.use(express.json({ limit: '15mb' }));
-const PORT = process.env.PORT || 10000;
+const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey'; const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN; const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID; const GPT_SECRET = process.env.GPT_SECRET; const OPENAI_KEY = process.env.OPENAI_API_KEY; const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const GPT_SECRET = process.env.GPT_SECRET;
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-import OpenAI from 'openai';
-const openai = new OpenAI({ apiKey: OPENAI_KEY });
+// ✅ Memory system const memoryPath = path.join(__dirname, 'memory.json'); function loadMemory(userId) { if (!fs.existsSync(memoryPath)) return ''; const data = JSON.parse(fs.readFileSync(memoryPath, 'utf-8')); return data.users?.[userId] || ''; } function saveMemory(userId, text) { let data = fs.existsSync(memoryPath) ? JSON.parse(fs.readFileSync(memoryPath, 'utf-8')) : { users: {} }; data.users[userId] = text; fs.writeFileSync(memoryPath, JSON.stringify(data, null, 2)); }
 
+// ✅ Save memory from client app.post('/save-memory', (req, res) => { const { userId, memory } = req.body; if (!userId || !memory) return res.status(400).json({ error: 'Missing userId or memory' }); saveMemory(userId, memory); res.json({ status: '✅ Memory saved' }); });
 
-// ✅ Memory system
-const memoryPath = path.join(__dirname, 'memory.json');
-function loadMemory(userId) {
-  if (!fs.existsSync(memoryPath)) return '';
-  const data = JSON.parse(fs.readFileSync(memoryPath, 'utf-8'));
-  return data.users?.[userId] || '';
-}
-function saveMemory(userId, text) {
-  let data = fs.existsSync(memoryPath) ? JSON.parse(fs.readFileSync(memoryPath, 'utf-8')) : { users: {} };
-  data.users[userId] = text;
-  fs.writeFileSync(memoryPath, JSON.stringify(data, null, 2));
-}
+// ✅ Load memory from server app.post('/load-memory', (req, res) => { const { userId } = req.body; if (!userId) return res.status(400).json({ error: 'Missing userId' }); const memory = loadMemory(userId); res.json({ memory }); });
 
-// ✅ Save memory from client
-app.post('/save-memory', (req, res) => {
-  const { userId, memory } = req.body;
-  if (!userId || !memory) return res.status(400).json({ error: 'Missing userId or memory' });
-  saveMemory(userId, memory);
-  res.json({ status: '✅ Memory saved' });
-});
+// ✅ Middleware app.use(session({ secret: process.env.SESSION_SECRET || 'immigrant_secret_session_key', resave: false, saveUninitialized: true, cookie: { maxAge: 24 * 60 * 60 * 1000, httpOnly: true, secure: false } })); app.use(cors()); app.use((req, res, next) => { if (req.originalUrl === '/stripe/webhook') { bodyParser.raw({ type: 'application/json' })(req, res, next); } else { next(); } });
 
-// ✅ Load memory from server
-app.post('/load-memory', (req, res) => {
-  const { userId } = req.body;
-  if (!userId) return res.status(400).json({ error: 'Missing userId' });
-  const memory = loadMemory(userId);
-  res.json({ memory });
-});
+// ✅ Logging & Telegram const logPath = path.join(__dirname, 'proxy_log.txt'); function logActivity(entry) { const logEntry = [${new Date().toISOString()}] ${entry}\n; fs.appendFileSync(logPath, logEntry); } async function sendTelegramAlert(msg) { if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return; try { await axios.post(https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage, { chat_id: TELEGRAM_CHAT_ID, text: msg, }); } catch (err) { console.error('❌ Telegram alert failed:', err.message); } }
 
-// ✅ Middleware
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'immigrant_secret_session_key',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { maxAge: 24 * 60 * 60 * 1000, httpOnly: true, secure: false }
-}));
-app.use(cors());
-app.use((req, res, next) => {
-  if (req.originalUrl === '/stripe/webhook') {
-    bodyParser.raw({ type: 'application/json' })(req, res, next);
-  } else {
-    next();
+// ✅ Admin credentials const users = []; const setupUser = () => { const username = process.env.ADMIN_USER || 'adminSTEF'; const rawPass = process.env.ADMIN_PASS || 'VetomEmka21$$$'; const hash = bcrypt.hashSync(rawPass, 10); users.push({ username, passwordHash: hash }); }; setupUser();
+
+// ✅ Auth middleware function authenticateJWT(req, res, next) { const authHeader = req.headers['authorization']; if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(403).json({ error: 'Invalid token' }); try { const token = authHeader.split(' ')[1]; req.user = jwt.verify(token, JWT_SECRET); next(); } catch { return res.status(403).json({ error: 'Invalid token' }); } }
+
+// ✅ Main chat endpoint app.post('/chat', async (req, res) => { const { userId, message, localMemory } = req.body; if (!userId || !message) { return res.status(400).json({ error: 'Missing userId or message.' }); }
+
+const serverMemory = loadMemory(userId); const combinedMemory = ${localMemory || ''}\n\n${serverMemory}; const systemPrompt = ` You are Stefan's AI assistant. Your memory includes: ${combinedMemory}
+
+Use this knowledge to help personally, deeply, and in context. `;
+
+try { const completion = await openai.chat.completions.create({ model: 'gpt-4', messages: [ { role: 'system', content: systemPrompt }, { role: 'user', content: message } ] });
+
+const aiResponse = completion.choices?.[0]?.message?.content || '⚠️ No response generated by GPT.';
+const updatedMemory = `${serverMemory}\nUser: ${message}\nAI: ${aiResponse}`;
+saveMemory(userId, updatedMemory);
+res.json({ reply: aiResponse });
+
+} catch (error) { console.error('❌ OpenAI Error:', error.message); res.status(500).json({ error: 'Failed to fetch AI response.' }); } });
+
+// ✅ Stripe webhook app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => { const sig = req.headers['stripe-signature']; let event;
+
+try { event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET); } catch (err) { console.error('⚠️ Webhook signature verification failed.', err.message); return res.status(400).send(Webhook Error: ${err.message}); }
+
+if (event.type === 'checkout.session.completed') { const session = event.data.object; const paymentsPath = path.join(__dirname, 'payments.json');
+
+stripe.checkout.sessions.listLineItems(session.id, {}, async (err, lineItems) => {
+  if (err) {
+    console.error('❌ Error retrieving line items:', err);
+    return;
   }
+
+  const productName = lineItems.data[0]?.description || 'Immigrant Login';
+  const accessType = productName.toLowerCase().includes('helper') ? 'immigrant-helper' : 'immigrant-login';
+
+  let payments = fs.existsSync(paymentsPath) ? JSON.parse(fs.readFileSync(paymentsPath)) : {};
+  payments[session.id] = { accessType };
+  fs.writeFileSync(paymentsPath, JSON.stringify(payments, null, 2));
+
+  const msg = `💰 Stripe Payment Successful!\n✅ Email: ${session.customer_email || 'unknown'}\n🧾 Amount: ${session.amount_total / 100} ${session.currency.toUpperCase()}\n🔁 Access: ${accessType}`;
+  logActivity(`💰 Stripe payment: ${msg}`);
+  sendTelegramAlert(msg);
 });
 
-// ✅ Logging & Telegram
-const logPath = path.join(__dirname, 'proxy_log.txt');
-function logActivity(entry) {
-  const logEntry = `[${new Date().toISOString()}] ${entry}\n`;
-  fs.appendFileSync(logPath, logEntry);
-}
-async function sendTelegramAlert(msg) {
-  if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
-  try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: TELEGRAM_CHAT_ID,
-      text: msg,
-    });
-  } catch (err) {
-    console.error('❌ Telegram alert failed:', err.message);
-  }
 }
 
-// ✅ Admin credentials
-const users = [];
-const setupUser = () => {
-  const username = process.env.ADMIN_USER || 'adminSTEF';
-  const rawPass = process.env.ADMIN_PASS || 'VetomEmka21$$$';
-  const hash = bcrypt.hashSync(rawPass, 10);
-  users.push({ username, passwordHash: hash });
-};
-setupUser();
+res.status(200).send('✅ Webhook received'); });
 
-// ✅ Auth middleware
-function authenticateJWT(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(403).json({ error: 'Invalid token' });
-  try {
-    const token = authHeader.split(' ')[1];
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch {
-    return res.status(403).json({ error: 'Invalid token' });
-  }
-}
+// ✅ Payment confirmation redirect app.get('/payment-confirmation', (req, res) => { const sessionId = req.query.session_id; const paymentsPath = path.join(__dirname, 'payments.json');
 
-// ✅ Main chat endpoint
-app.post('/chat', async (req, res) => {
-  const { userId, message, localMemory } = req.body;
-  if (!userId || !message) {
-    return res.status(400).json({ error: 'Missing userId or message.' });
-  }
+if (!sessionId || !fs.existsSync(paymentsPath)) { return res.redirect('/error.html'); }
 
-  const serverMemory = loadMemory(userId);
-  const combinedMemory = `${localMemory || ''}\n\n${serverMemory}`;
-  const systemPrompt = `
-You are Stefan's AI assistant. Your memory includes:
-${combinedMemory}
+try { const payments = JSON.parse(fs.readFileSync(paymentsPath)); const record = payments[sessionId]; if (!record) return res.redirect('/error.html');
 
-Use this knowledge to help personally, deeply, and in context.
-`;
+const redirectPath = `/${record.accessType}/index.php?session_id=${sessionId}`;
+return res.redirect(redirectPath);
 
-  try {
-    const completion = await openai.createChatCompletion({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message }
-      ]
-    });
+} catch (err) { return res.redirect('/error.html'); } });
 
-    const aiResponse = completion.data?.choices?.[0]?.message?.content || '⚠️ No response generated by GPT.';
-    const updatedMemory = `${serverMemory}\nUser: ${message}\nAI: ${aiResponse}`;
-    saveMemory(userId, updatedMemory);
-    res.json({ reply: aiResponse });
-  } catch (error) {
-    console.error('❌ OpenAI Error:', error.message);
-    res.status(500).json({ error: 'Failed to fetch AI response.' });
-  }
-});
+// ✅ Start the server app.listen(PORT, () => { console.log(🚀 Proxy Shield AI running on port ${PORT}); });
 
-// ✅ Stripe webhook
-app.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('⚠️ Webhook signature verification failed.', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const paymentsPath = path.join(__dirname, 'payments.json');
-
-    stripe.checkout.sessions.listLineItems(session.id, {}, async (err, lineItems) => {
-      if (err) {
-        console.error('❌ Error retrieving line items:', err);
-        return;
-      }
-
-      const productName = lineItems.data[0]?.description || 'Immigrant Login';
-      const accessType = productName.toLowerCase().includes('helper') ? 'immigrant-helper' : 'immigrant-login';
-
-      let payments = fs.existsSync(paymentsPath) ? JSON.parse(fs.readFileSync(paymentsPath)) : {};
-      payments[session.id] = { accessType };
-      fs.writeFileSync(paymentsPath, JSON.stringify(payments, null, 2));
-
-      const msg = `💰 Stripe Payment Successful!\n✅ Email: ${session.customer_email || 'unknown'}\n🧾 Amount: ${session.amount_total / 100} ${session.currency.toUpperCase()}\n🔁 Access: ${accessType}`;
-      logActivity(`💰 Stripe payment: ${msg}`);
-      sendTelegramAlert(msg);
-    });
-  }
-
-  res.status(200).send('✅ Webhook received');
-});
-
-// ✅ Payment confirmation redirect
-app.get('/payment-confirmation', (req, res) => {
-  const sessionId = req.query.session_id;
-  const paymentsPath = path.join(__dirname, 'payments.json');
-
-  if (!sessionId || !fs.existsSync(paymentsPath)) {
-    return res.redirect('/error.html');
-  }
-
-  try {
-    const payments = JSON.parse(fs.readFileSync(paymentsPath));
-    const record = payments[sessionId];
-    if (!record) return res.redirect('/error.html');
-
-    const redirectPath = `/${record.accessType}/index.php?session_id=${sessionId}`;
-    return res.redirect(redirectPath);
-  } catch (err) {
-    return res.redirect('/error.html');
-  }
-});
-
-// ✅ Start the server
-app.listen(PORT, () => {
-  console.log(`🚀 Proxy Shield AI running on port ${PORT}`);
-});
