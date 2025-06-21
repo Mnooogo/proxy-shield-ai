@@ -10,7 +10,12 @@ const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
 
 const app = express();
-const PORT = process.env.PORT;
+cconst PORT = process.env.PORT;
+if (!PORT) {
+  console.error('❌ Missing PORT env variable! Render requires process.env.PORT to be set.');
+  process.exit(1);
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'verysecretjwtkey';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
