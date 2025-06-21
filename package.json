@@ -1,5 +1,4 @@
 // ✅ package.json
-/*
 {
   "name": "proxy-shield-ai",
   "version": "1.0.0",
@@ -18,4 +17,3 @@
     "jsonwebtoken": "^9.0.2"
   }
 }
-*/
