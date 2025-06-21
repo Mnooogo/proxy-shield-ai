@@ -7,7 +7,6 @@
   "scripts": {
     "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
-    "build": "npm ci --prefer-offline --no-audit && node server.js"
   },
   "dependencies": {
     "axios": "^1.9.0",
