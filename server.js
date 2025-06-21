@@ -33,7 +33,8 @@ app.use(rateLimit({
   windowMs: 60 * 1000,
   max: 60,
   message: '⏱️ Too many requests. Try again soon.',
-  standardHeaders: true // ✅ fixes trust proxy warning
+  standardHeaders: true, // ✅ fixes trust proxy warning
+  legacyHeaders: false   // ✅ prevent conflict with deprecated headers
 }));
 
 // Paths
@@ -179,4 +180,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT} on 0.0.0.0`);
 });
-
