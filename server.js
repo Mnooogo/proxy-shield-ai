@@ -167,6 +167,17 @@ app.post('/save-memory', (req, res) => {
   res.json({ status: '✅ Memory saved to server.' });
 });
 
+app.post('/save-memory', (req, res) => {
+  const { userId, memory } = req.body;
+  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+  const memoryPath = path.join(__dirname, 'memory', `${userId}.txt`);
+  fs.mkdirSync(path.join(__dirname, 'memory'), { recursive: true });
+  fs.writeFileSync(memoryPath, memory || '', 'utf8');
+
+  res.json({ status: '✅ Memory saved to server.' });
+});
+
 app.post('/load-memory', (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ error: 'Missing userId' });
@@ -179,14 +190,6 @@ app.post('/load-memory', (req, res) => {
   res.json({ memory });
 });
 
-// Daily reset
-cron.schedule('0 0 * * *', () => {
-  usageData = {};
-  requestsPerDay = {};
-  saveJSON(usagePath, usageData);
-  saveJSON(requestPath, requestsPerDay);
-  logActivity('🔁 Daily usage reset');
-});
 
 app.listen(PORT, () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT}`);
