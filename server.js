@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
 
 const app = express();
-cconst PORT = process.env.PORT;
+const PORT = process.env.PORT;
 if (!PORT) {
   console.error('❌ Missing PORT env variable! Render requires process.env.PORT to be set.');
   process.exit(1);
