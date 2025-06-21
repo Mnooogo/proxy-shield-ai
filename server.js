@@ -137,7 +137,7 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, model } = req.body;
   try {
     const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model: model || 'gpt-4', messages },
+      { model: model || 'gpt-3.5-turbo', messages },
       { headers: { Authorization: `Bearer ${OPENAI_KEY}` } });
     res.json({ reply: response.data.choices?.[0]?.message?.content || '' });
   } catch (err) {
