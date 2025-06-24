@@ -178,6 +178,66 @@ app.use((err, req, res, next) => {
   }
 });
 
+// In-memory verification store
+const verificationCodes = {}; // { "phoneNumber": { code: "123456", expires: timestamp } }
+
+function generateCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // e.g. "482931"
+}
+
+// /send-code endpoint
+app.post('/send-code', async (req, res) => {
+  const { phoneNumber, source = 'unknown' } = req.body;
+
+  if (!phoneNumber) return res.status(400).json({ success: false, error: 'Missing phoneNumber' });
+
+  const code = generateCode();
+  const expires = Date.now() + 10 * 60 * 1000; // valid for 10 minutes
+
+  verificationCodes[phoneNumber] = { code, expires };
+
+  const message = `📨 Code for ${phoneNumber} from [${source}]: ${code}`;
+  log(message);
+  await sendTelegramAlert(message);
+
+  res.json({ success: true });
+});
+
+// /verify-code endpoint
+app.post('/verify-code', (req, res) => {
+  const { phoneNumber, code, source = 'unknown' } = req.body;
+
+  if (!phoneNumber || !code) {
+    return res.status(400).json({ success: false, error: 'Missing phone or code' });
+  }
+
+  const record = verificationCodes[phoneNumber];
+
+  if (!record) {
+    log(`❌ No code found for ${phoneNumber} (${source})`);
+    return res.json({ success: false, error: 'No code found' });
+  }
+
+  if (Date.now() > record.expires) {
+    delete verificationCodes[phoneNumber];
+    log(`⏰ Code expired for ${phoneNumber} (${source})`);
+    return res.json({ success: false, error: 'Code expired' });
+  }
+
+  if (record.code !== code) {
+    log(`❌ Invalid code for ${phoneNumber} (${source})`);
+    return res.json({ success: false, error: 'Invalid code' });
+  }
+
+  // Success
+  delete verificationCodes[phoneNumber];
+  log(`✅ Code verified for ${phoneNumber} (${source})`);
+  sendTelegramAlert(`✅ Verified: ${phoneNumber} from [${source}]`);
+
+  res.json({ success: true });
+});
+
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Proxy Shield AI running on port ${PORT} on 0.0.0.0`);
 });
