@@ -192,16 +192,17 @@ app.post('/send-code', async (req, res) => {
   if (!phoneNumber) return res.status(400).json({ success: false, error: 'Missing phoneNumber' });
 
   const code = generateCode();
-  const expires = Date.now() + 10 * 60 * 1000; // valid for 10 minutes
+  const expires = Date.now() + 10 * 60 * 1000;
 
   verificationCodes[phoneNumber] = { code, expires };
 
-  const message = `📨 Code for ${phoneNumber} from [${source}]: ${code}`;
-  log(message);
-  await sendTelegramAlert(message);
+  const msg = `📨 Code for ${phoneNumber} from [${source}]: ${code}`;
+  log(msg);
+  await sendTelegramAlert(msg);
 
   res.json({ success: true });
 });
+
 
 // /verify-code endpoint
 app.post('/verify-code', (req, res) => {
@@ -236,6 +237,7 @@ app.post('/verify-code', (req, res) => {
 
   res.json({ success: true });
 });
+
 
 
 app.listen(PORT, '0.0.0.0', () => {
