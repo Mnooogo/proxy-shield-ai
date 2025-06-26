@@ -1,6 +1,3 @@
-// 🛠 Trigger dummy deploy from GitHub
-// 🛠 Force deploy on Render — fix stuck build
-//  Stable Proxy Shield server.js
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
@@ -12,40 +9,31 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
-app.set('trust proxy', true); // ✅ Allow X-Forwarded-For
+app.set('trust proxy', true);
 
-const PORT = parseInt(process.env.PORT, 10);
-if (isNaN(PORT)) {
-  console.error('❌ Invalid PORT:', process.env.PORT);
-  process.exit(1);
-}
-
-// ENV CONFIG
+const PORT = parseInt(process.env.PORT, 10) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 const GPT_SECRET = process.env.GPT_SECRET;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-// Middleware
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 app.use(rateLimit({
   windowMs: 60 * 1000,
   max: 60,
-  message: '⏱️ Too many requests. Try again soon.',
-  standardHeaders: true, // ✅ fixes trust proxy warning
-  legacyHeaders: false   // ✅ prevent conflict with deprecated headers
+  message: '⏱️ Too many requests. Try again later.',
+  standardHeaders: true,
+  legacyHeaders: false
 }));
 
-// Paths
 const usagePath = path.join(__dirname, 'usage.json');
 const requestPath = path.join(__dirname, 'requests.json');
 const blockedPath = path.join(__dirname, 'blocked.json');
 const logPath = path.join(__dirname, 'proxy_log.txt');
 const memoryDir = path.join(__dirname, 'memory');
 
-// Data storage
 let usageData = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath)) : {};
 let requestsPerDay = fs.existsSync(requestPath) ? JSON.parse(fs.readFileSync(requestPath)) : {};
 let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blockedPath)) : {};
@@ -53,20 +41,18 @@ let blockedIPs = fs.existsSync(blockedPath) ? JSON.parse(fs.readFileSync(blocked
 const saveJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2));
 const log = msg => fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
 
-// Telegram alert
 async function sendTelegramAlert(msg) {
   if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       chat_id: TELEGRAM_CHAT_ID,
-      text: `🚨 Proxy Alert:\n${msg}`,
+      text: `📢 Proxy:\n${msg}`,
     });
   } catch (e) {
     console.error('❌ Telegram error:', e.message);
   }
 }
 
-// Auth
 const users = [];
 const setupUser = () => {
   const username = process.env.ADMIN_USER || 'admin';
@@ -96,57 +82,37 @@ function checkGPTSecret(req, res, next) {
   next();
 }
 
-// Routes
-app.get('/', (_, res) => res.json({ status: '🛡️ Proxy Shield Ready' }));
-
-app.post('/proxy', async (req, res) => {
-  const ip = req.ip;
-  const now = Date.now();
-  const { apiKey, messages, model } = req.body;
-
-  if (blockedIPs[ip] && blockedIPs[ip] > now) return res.status(403).json({ error: 'Blocked for abuse.' });
-  if (!apiKey || !messages || !model) return res.status(400).json({ error: 'Missing fields.' });
-
-  requestsPerDay[ip] = (requestsPerDay[ip] || 0) + 1;
-  usageData[ip] = usageData[ip] || 0;
-  if (requestsPerDay[ip] > 100) {
-    blockedIPs[ip] = now + 86400000;
-    saveJSON(blockedPath, blockedIPs);
-    return res.status(429).json({ error: 'Blocked for 24h.' });
-  }
-
-  try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model, messages },
-      { headers: { Authorization: `Bearer ${apiKey}` } });
-
-    const used = response.data.usage?.total_tokens || 0;
-    usageData[ip] += used;
-    saveJSON(usagePath, usageData);
-    saveJSON(requestPath, requestsPerDay);
-
-    if (usageData[ip] > 5000) {
-      blockedIPs[ip] = now + 86400000;
-      saveJSON(blockedPath, blockedIPs);
-      return res.status(429).json({ error: 'Token limit exceeded.' });
-    }
-
-    log(`✅ ${ip} | Tokens: ${used} | Total: ${usageData[ip]}`);
-    res.json(response.data);
-  } catch (err) {
-    log(`❌ Proxy error ${ip}: ${err.message}`);
-    res.status(500).json({ error: 'Proxy failed', details: err.message });
-  }
-});
+app.get('/', (_, res) => res.json({ status: '✅ Proxy Shield Active' }));
 
 app.post('/chat', checkGPTSecret, async (req, res) => {
   const { messages, model } = req.body;
+
   try {
     const response = await axios.post('https://api.openai.com/v1/chat/completions',
-      { model: model || 'gpt-3.5-turbo', messages },
-      { headers: { Authorization: `Bearer ${OPENAI_KEY}` } });
-    res.json({ reply: response.data.choices?.[0]?.message?.content || '' });
+      {
+        model: model || 'gpt-3.5-turbo',
+        messages,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_KEY}`,
+        },
+      });
+
+    if (!response.data || !response.data.choices || !response.data.choices[0]) {
+      log('❌ Invalid response from OpenAI');
+      return res.status(500).json({ error: 'Invalid response from OpenAI' });
+    }
+
+    const reply = response.data.choices[0].message.content;
+    res.json({
+      reply,
+      usage: response.data.usage || {}
+    });
+
+    log(`✅ /chat used | Tokens: ${response.data.usage?.total_tokens || 0}`);
   } catch (err) {
+    log(`❌ Chat error: ${err.message}`);
     res.status(500).json({ error: 'Chat error', details: err.message });
   }
 });
@@ -170,28 +136,12 @@ app.post('/load-memory', (req, res) => {
   res.json({ memory });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error("🔥 Global Error Handler:", err);
-  if (!res.headersSent) {
-    res.status(500).json({ error: err.message || 'Internal Server Error' });
-  }
-});
-
-// In-memory verification store
-const verificationCodes = {}; // { "phoneNumber": { code: "123456", expires: timestamp } }
-
-function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString(); // e.g. "482931"
-}
-
-// /send-code endpoint
 app.post('/send-code', async (req, res) => {
   const { phoneNumber, source = 'unknown' } = req.body;
 
   if (!phoneNumber) return res.status(400).json({ success: false, error: 'Missing phoneNumber' });
 
-  const code = generateCode();
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expires = Date.now() + 10 * 60 * 1000;
 
   verificationCodes[phoneNumber] = { code, expires };
@@ -203,8 +153,8 @@ app.post('/send-code', async (req, res) => {
   res.json({ success: true });
 });
 
+const verificationCodes = {};
 
-// /verify-code endpoint
 app.post('/verify-code', (req, res) => {
   const { phoneNumber, code, source = 'unknown' } = req.body;
 
@@ -230,7 +180,6 @@ app.post('/verify-code', (req, res) => {
     return res.json({ success: false, error: 'Invalid code' });
   }
 
-  // Success
   delete verificationCodes[phoneNumber];
   log(`✅ Code verified for ${phoneNumber} (${source})`);
   sendTelegramAlert(`✅ Verified: ${phoneNumber} from [${source}]`);
@@ -238,8 +187,6 @@ app.post('/verify-code', (req, res) => {
   res.json({ success: true });
 });
 
-
-
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Proxy Shield AI running on port ${PORT} on 0.0.0.0`);
+  console.log(`✅ Proxy Shield running on port ${PORT}`);
 });
