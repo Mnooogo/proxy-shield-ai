@@ -187,6 +187,12 @@ app.post('/verify-code', (req, res) => {
   res.json({ success: true });
 });
 
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Proxy Shield running on port ${PORT}`);
 });
