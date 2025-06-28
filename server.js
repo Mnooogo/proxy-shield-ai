@@ -81,6 +81,11 @@ function checkGPTSecret(req, res, next) {
   }
   next();
 }
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*"); // или конкретно: "https://playforall.online"
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
 
 app.get('/', (_, res) => res.json({ status: '✅ Proxy Shield Active' }));
 
@@ -185,12 +190,6 @@ app.post('/verify-code', (req, res) => {
   sendTelegramAlert(`✅ Verified: ${phoneNumber} from [${source}]`);
 
   res.json({ success: true });
-});
-
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  next();
 });
 
 app.listen(PORT, '0.0.0.0', () => {
