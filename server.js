@@ -81,8 +81,9 @@ function checkGPTSecret(req, res, next) {
   }
   next();
 }
+
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*"); // или конкретно: "https://playforall.online"
+  res.header("Access-Control-Allow-Origin", "*"); // Или конкретно: "https://playforall.online"
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
   next();
 });
@@ -117,6 +118,8 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
 
     log(`✅ /chat used | Tokens: ${response.data.usage?.total_tokens || 0}`);
   } catch (err) {
+    // Добавих този ред за пълно логване към Railway Logs:
+    console.error("❌ Chat error:", err.response?.data || err.message || err);
     log(`❌ Chat error: ${err.message}`);
     res.status(500).json({ error: 'Chat error', details: err.message });
   }
