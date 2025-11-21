@@ -7,6 +7,8 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
+const { analyzeText } = require('./live-interface-core');
+
 
 const app = express();
 app.set('trust proxy', true);
@@ -122,6 +124,73 @@ app.post('/chat', checkGPTSecret, async (req, res) => {
     console.error("❌ Chat error:", err.response?.data || err.message || err);
     log(`❌ Chat error: ${err.message}`);
     res.status(500).json({ error: 'Chat error', details: err.message });
+  }
+});
+app.post('/living-interface', checkGPTSecret, async (req, res) => {
+  const { text, model } = req.body;
+
+  if (!text || typeof text !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid text' });
+  }
+
+  // 1) Анализ на текста – „пулсът“
+  const analysis = analyzeText(text);
+
+  // 2) Подготовка на промпта за OpenAI
+  const prompt = `
+You are a prototype of a "Living Interface" between human and AI.
+
+User's current state (analyzed from their text):
+- Rhythm: pace = ${analysis.rhythm.pace}, density = ${analysis.rhythm.density}, length = ${analysis.rhythm.length} words
+- Emotion: tone = ${analysis.emo.tone}, intensity = ${analysis.emo.intensity}
+- Concepts: ${analysis.concepts.length ? analysis.concepts.join(', ') : 'none detected'}
+
+Instruction:
+Respond in Bulgarian.
+Your goal is to harmonize with the user's internal rhythm and emotional state.
+1) First, briefly reflect what you sense in their state (1–2 изречения).
+2) Then, продължи с отговор, който да им помогне да се подредят, разширят или успокоят – според тона и интензитета.
+3) Бъди естествен, човешки, без клишета и без терапевтични клишета.
+
+Original user text:
+"${text}"
+  `.trim();
+
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: model || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are the Living Interface, a resonant reflective AI presence.' },
+          { role: 'user', content: prompt }
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_KEY}`,
+        },
+      }
+    );
+
+    if (!response.data || !response.data.choices || !response.data.choices[0]) {
+      log('❌ Invalid response from OpenAI @ /living-interface');
+      return res.status(500).json({ error: 'Invalid response from OpenAI' });
+    }
+
+    const reply = response.data.choices[0].message.content;
+
+    log(`✅ /living-interface used | Tokens: ${response.data.usage?.total_tokens || 0}`);
+
+    return res.json({
+      analysis,
+      reply,
+      usage: response.data.usage || {}
+    });
+  } catch (err) {
+    console.error("❌ Living interface error:", err.response?.data || err.message || err);
+    log(`❌ Living interface error: ${err.message}`);
+    return res.status(500).json({ error: 'Living interface error', details: err.message });
   }
 });
 
