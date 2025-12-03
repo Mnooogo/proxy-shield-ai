@@ -1,7 +1,7 @@
 {
   "name": "proxy-shield-ai",
   "version": "1.0.1",
-  "description": "Stable proxy server for AI usage",
+  "description": "Secure API gateway for AI and web projects",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -22,3 +22,4 @@
     "glob": "~10.5.0"
   }
 }
+
