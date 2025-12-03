@@ -2,6 +2,7 @@
   "name": "proxy-shield-ai",
   "version": "1.0.1",
   "description": "Secure API gateway for AI and web projects",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
